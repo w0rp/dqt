@@ -1,0 +1,5 @@
+Copyright (c) 2013, w0rp <devw0rp@gmail.com>
+All rights reserved.
+
+The source code in this project is made available under a two-clause BSD
+licence. The full text of this licence can be found in the file bsd.txt.

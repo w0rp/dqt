@@ -1,0 +1,9 @@
+Makefile*
+debug/
+release/
+*.vcxproj*
+*.opensdf
+*.sdf
+*.sln
+*.suo
+*.pdb
