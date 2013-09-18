@@ -1,1 +1,12 @@
 bin/
+*.sln
+CMakeFiles/
+CMakeCache.txt
+Debug/
+Release/
+*.vcxproj
+*.vcxproj.filters
+*.sdf
+*.suo
+*.opensdf
+cmake_install.cmake

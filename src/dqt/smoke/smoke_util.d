@@ -1,10 +1,64 @@
 module dqt.smoke.smoke_util;
 
+import core.stdc.config : c_long, c_ulong;
+
 import dqt.smoke.smoke;
 import dqt.smoke.smoke_cwrapper;
 
-// Create wrappers around the intentionally horribly named Smoke
-// C API method calls.
+
+@property @safe pure nothrow
+const(char)* moduleName(Smoke* smoke) {
+    return smoke._moduleName;
+}
+
+@property @safe pure nothrow
+package Smoke.Class[] classList(Smoke* smoke) {
+    return smoke._classes[0 .. smoke._numClasses];
+}
+
+@property @safe pure nothrow
+package Smoke.Method[] methodList(Smoke* smoke) {
+    return smoke._methods[0 .. smoke._numMethods];
+}
+
+@property @safe pure nothrow
+package const(char)*[] methodNameList(Smoke* smoke) {
+    return smoke._methodNames[0 .. smoke._numMethodNames];
+}
+
+
+/*
+
+private enum ModuleIndex NullModuleIndex;
+
+Smoke.ModuleIndex findMethodName(Smoke* smoke, const char *c, const char *m) {
+    ModuleIndex mni = smoke.idMethodName(m);
+
+    if (mni.index) return mni;
+
+    ModuleIndex cmi = smoke.findClass(c);
+
+    if (cmi.smoke && cmi.smoke != smoke) {
+        return cmi.smoke->findMethodName(c, m);
+    } else if (cmi.smoke == smoke) {
+        if (!smoke.classes[cmi.index].parents) return NullModuleIndex;
+
+        for (Index p = smoke.classes[cmi.index].parents; smoke.inheritanceList[p]; p++) {
+            Smoke.Index ci = inheritanceList[p];
+            const char* cName = smoke.className(ci);
+            ModuleIndex mi = classMap[cName].smoke->findMethodName(cName, m);
+
+            if (mi.index) return mi;
+        }
+    }
+
+    return NullModuleIndex;
+}
+
+*/
+
+
+/+
 
 /**
  * Returns: The name of the module (e.g. "qt" or "kde")
@@ -31,7 +85,7 @@ Index idType(Smoke smoke, const(char)* t)
 in {
     assert(smoke.ptr !is null);
 } body {
-    return idType(smoke.ptr, t);
+    return Smoke_c_idType(smoke.ptr, t);
 }
 
 ///
@@ -79,7 +133,7 @@ ModuleIndex findMethod(Smoke smoke, ModuleIndex c, ModuleIndex name)
 in {
     assert(smoke.ptr !is null);
 } body {
-    return Smoke_c_findMethod_ModuleIndex(smoke, c, name);
+    return Smoke_c_findMethod_ModuleIndex(smoke.ptr, c, name);
 }
 
 ///
@@ -107,11 +161,13 @@ in {
     return Smoke_ModuleIndex_c_methodIndex(moduleIndex);
 }
 
++/
+
 /**
  * Returns: true if a module index didn't match.
  */
 @property @safe pure nothrow
-bool hasNoMatch(in ref ModuleIndex moduleIndex) {
+bool hasNoMatch(in ref Smoke.ModuleIndex moduleIndex) {
     return moduleIndex.index == 0;
 }
 
@@ -119,7 +175,7 @@ bool hasNoMatch(in ref ModuleIndex moduleIndex) {
  * Returns: true if a module index had many matches.
  */
 @property @safe pure nothrow
-bool hasMultipleMatches(in ref ModuleIndex moduleIndex) {
+bool hasMultipleMatches(in ref Smoke.ModuleIndex moduleIndex) {
     return moduleIndex.index < 0;
 }
 
@@ -127,9 +183,11 @@ bool hasMultipleMatches(in ref ModuleIndex moduleIndex) {
  * Returns: true if a module index had an exact match for a method.
  */
 @property @safe pure nothrow
-bool hasExactMatch(in ref ModuleIndex moduleIndex) {
+bool hasExactMatch(in ref Smoke.ModuleIndex moduleIndex) {
     return moduleIndex.index > 1;
 }
+
+/+
 
 ///
 Method* method(Smoke smoke, Index methodIndex)
@@ -137,7 +195,7 @@ in {
     assert(smoke.ptr !is null);
     assert(methodIndex > 0, "Invalid method index!");
 } body {
-    return Smoke_MethodIndex_c_method(smoke.ptr, methodIndex);
+    return Smoke_c_method(smoke.ptr, methodIndex);
 }
 
 ClassFn classFunction(Smoke smoke, Index classID)
@@ -146,6 +204,8 @@ in {
 } body {
     return Smoke_c_classFunction(smoke.ptr, classID);
 }
+
++/
 
 /**
  * Create a stack of arguments for SMOKE.
@@ -159,11 +219,11 @@ in {
  * Returns:
  *    A SMOKE stack item array containing the values given.
  */
-StackItem[A.length + 1] createSmokeStack(A...)(A a) {
+Smoke.StackItem[A.length + 1] createSmokeStack(A...)(A a) {
     import std.traits : isPointer;
 
     // The stack also includes the return value.
-    StackItem[A.length + 1] arr;
+    Smoke.StackItem[A.length + 1] arr;
 
     foreach(index, value; a) {
         alias typeof(value) T;
@@ -185,10 +245,10 @@ StackItem[A.length + 1] createSmokeStack(A...)(A a) {
             arr[index + 1].s_int = value;
         } else static if(is(T == uint)) {
             arr[index + 1].s_uint = value;
-        } else static if(is(T == long)) {
+        } else static if(is(T == c_long)) {
             // The same as s_enum
             arr[index + 1].s_long = value;
-        } else static if(is(T == ulong)) {
+        } else static if(is(T == c_ulong)) {
             arr[index + 1].s_ulong = value;
         } else static if(is(T == float)) {
             arr[index + 1].s_float = value;
