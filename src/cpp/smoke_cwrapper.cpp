@@ -1,3 +1,5 @@
+#include <QString>
+
 #include "smoke_cwrapper.h"
 #include "smoke.h"
 #include "qtcore_smoke.h"
@@ -24,7 +26,8 @@ public:
 
     virtual void deleted(Smoke::Index classId, void *obj)  {}
 
-    virtual bool callMethod(Smoke::Index method, void *obj, Smoke::Stack args, bool isAbstract = false) {
+    virtual bool callMethod(Smoke::Index method, void *obj, Smoke::Stack args,
+    bool isAbstract = false) {
         return false;
     }
 
@@ -60,15 +63,19 @@ SMOKEC_EXPORT void* dqt_fetch_qtgui_Smoke() {
     return qtgui_Smoke;
 }
 
-SMOKEC_EXPORT void dqt_call_ClassFn(void* classFn, short method, void* obj, void* args) {
-    static_cast<Smoke::ClassFn>(classFn)(method, obj, static_cast<Smoke::Stack>(args));
+SMOKEC_EXPORT void dqt_call_ClassFn(void* classFn, short method, void* obj,
+void* args) {
+    static_cast<Smoke::ClassFn>(classFn)(
+        method, obj, static_cast<Smoke::Stack>(args));
 }
 
-SMOKEC_EXPORT void* dqt_call_CastFn(void* castFn, void* obj, short from, short to) {
+SMOKEC_EXPORT void* dqt_call_CastFn(void* castFn, void* obj, short from,
+short to) {
     return static_cast<Smoke::CastFn>(castFn)(obj, from, to);
 }
 
-SMOKEC_EXPORT void dqt_call_EnumFn(void* enumFn, int enumOperation, short index, void** ptrRef, long* longRef) {
+SMOKEC_EXPORT void dqt_call_EnumFn(void* enumFn, int enumOperation,
+short index, void** ptrRef, long* longRef) {
     static_cast<Smoke::EnumFn>(enumFn)(
         static_cast<Smoke::EnumOperation>(enumOperation),
         index,
@@ -83,5 +90,18 @@ SMOKEC_EXPORT void dqt_bind_instance(void* classFn, void* object) {
     bindingStack[1].s_voidp = &NullBinding::getInstance();
 
     return static_cast<Smoke::ClassFn>(classFn)(0, object, bindingStack);
+}
+
+SMOKEC_SPEC void* dqt_init_QString_reference(const short* data, int size) {
+    // fromRawData creates a QString from UTF-16 data without copying it.
+    // QString(const QString&) creates a QString without copying the data.
+    // We put this non-copy on the heap so D can use it.
+
+    return new QString(
+        QString::fromRawData(reinterpret_cast<const QChar*>(data), size));
+}
+
+SMOKEC_SPEC void dqt_delete_QString_reference(void* qString) {
+    delete static_cast<QString*>(qString);
 }
 

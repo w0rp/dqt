@@ -92,10 +92,6 @@ public:
             _method.method, a[0], stack.ptr);
 
         if (method.isConstructor) {
-            debug {
-                writeln("Calling that constructor method!");
-            }
-
             // Smoke requires an extra call to make constructors work.
             dqt_bind_instance(_classData._cls.classFn, stack[0].s_voidp);
         }
@@ -178,10 +174,6 @@ private:
             );
 
             string methodName = methNameList[meth.name].toSlice.idup;
-
-            debug {
-                //writefln("%s::%s", className, methodName);
-            }
 
             classData.addMethod(methodName, &meth);
         }

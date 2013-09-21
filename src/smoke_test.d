@@ -1,4 +1,5 @@
 import dqt.smoke.all;
+import dqt.smoke.smoke_cwrapper;
 
 pragma(lib, "smokebase_implib.lib");
 pragma(lib, "smoke_cwrapper_implib.lib");
@@ -6,6 +7,7 @@ pragma(lib, "smoke_cwrapper_implib.lib");
 int main() {
     import core.runtime;
     import std.stdio;
+    import std.string;
 
     auto loader = SmokeLoader(QtLibraryFlag.all);
 
@@ -13,28 +15,28 @@ int main() {
         "QApplication", "QApplication", "int&", "char**");
 
     auto appExec = loader.demandMethod(
-        "QCoreApplication", "exec");
+        "QApplication", "exec");
 
-    auto widgetCtor = loader.demandMethod("QWidget", "QWidget",
-       "QWidget*", "QFlags<Qt::WindowType>");
+    auto labelCtor = loader.demandMethod("QLabel", "QLabel",
+       "const QString&", "QWidget*", "QFlags<Qt::WindowType>");
 
     auto showMethod = loader.demandMethod("QWidget", "show");
 
     auto cArgs = Runtime.cArgs;
 
-    writeln(appCtor.method.flags);
-    writeln(appCtor.method.numArgs);
-    writeln(appCtor.name);
-
     auto app = appCtor(null, &cArgs.argc, cArgs.argv).s_voidp;
 
-    auto widget = widgetCtor(null, null, 0).s_voidp;
+    wstring hello = "Hello DQT!";
 
-    showMethod(widget);
+    auto helloQString = dqt_init_QString_reference(
+        cast(const(short)*) hello.ptr, hello.length);
 
-    // Almost works...
+    scope(exit)
+        dqt_delete_QString_reference(helloQString);
 
-    appExec(null);
+    auto label = labelCtor(null, helloQString, null, 0).s_voidp;
 
-    return 0;
+    showMethod(label);
+
+    return appExec(null).s_int;
 }

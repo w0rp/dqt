@@ -2,10 +2,12 @@ project(smoke_cwrapper)
 
 cmake_minimum_required(VERSION 2.8)
 
+find_package(Qt4 REQUIRED)
 find_package(Smoke REQUIRED)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${SMOKE_CMAKE_MODULE_DIR}")
 
+include_directories(${QT_INCLUDES} parser ${CMAKE_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${SMOKE_INCLUDE_DIR})
 
 set(LIB_TYPE SHARED)
@@ -40,6 +42,7 @@ find_library(SMOKE_QTGUI_LIB_NAMES
 )
 
 target_link_libraries(smoke_cwrapper
+    ${QT_QTCORE_LIBRARY}
     ${SMOKE_BASE_LIB_NAMES}
     ${SMOKE_QTCORE_LIB_NAMES}
     ${SMOKE_QTGUI_LIB_NAMES}

@@ -28,3 +28,6 @@ extern(C) extern __gshared void dqt_call_EnumFn(
     void* enumFn, int enumOp, short index, void** ptrRef, c_long* longRef);
 
 extern(C) extern __gshared void dqt_bind_instance(void* classFn, void* object);
+
+extern(C) extern __gshared void* dqt_init_QString_reference(const(short)* data, int size);
+extern(C) extern __gshared void dqt_delete_QString_reference(void* qString);
