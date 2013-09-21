@@ -80,7 +80,7 @@ public:
 
     Smoke.StackItem opCall(A...)(A a) if (is(A[0] : void*))
     in {
-        assert(method.isConstructor || a[0] !is null,
+        assert(!method.isInstance || a[0] !is null,
             "null pointer for smoke object, expected instance pointer!");
         assert(a.length - 1 == method.numArgs,
             "Stack size did not match argument count!");
@@ -90,6 +90,15 @@ public:
         // Forward the call to the C wrapper.
         dqt_call_ClassFn(_classData._cls.classFn,
             _method.method, a[0], stack.ptr);
+
+        if (method.isConstructor) {
+            debug {
+                writeln("Calling that constructor method!");
+            }
+
+            // Smoke requires an extra call to make constructors work.
+            dqt_bind_instance(_classData._cls.classFn, stack[0].s_voidp);
+        }
 
         return stack[0];
     }

@@ -25,6 +25,7 @@ SMOKEC_SPEC void* dqt_fetch_qtgui_Smoke();
 SMOKEC_SPEC void dqt_call_ClassFn(void* classFn, short method, void* obj, void* args);
 SMOKEC_SPEC void* dqt_call_CastFn(void* castFn, void* obj, short from, short to);
 SMOKEC_SPEC void dqt_call_EnumFn(void* enumFn, int enumOperation, short index, void** ptrRef, long* longRef);
+SMOKEC_SPEC void dqt_bind_instance(void* classFn, void* object);
 
 #ifdef __cplusplus
 }

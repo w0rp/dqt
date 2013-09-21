@@ -33,6 +33,22 @@ in {
     return (meth.flags & Smoke.MethodFlags.mf_ctor) != 0;
 }
 
+@property pure @safe nothrow
+bool isStatic (const(Smoke.Method*) meth)
+in {
+    assert(meth !is null);
+} body {
+    return (meth.flags & Smoke.MethodFlags.mf_static) != 0;
+}
+
+@property pure @safe nothrow
+bool isInstance (const(Smoke.Method*) meth)
+in {
+    assert(meth !is null);
+} body {
+    return !meth.isConstructor && !meth.isStatic;
+}
+
 /**
  * Create a stack of arguments for SMOKE.
  *

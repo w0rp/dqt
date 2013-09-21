@@ -15,7 +15,7 @@ int main() {
     auto appExec = loader.demandMethod(
         "QCoreApplication", "exec");
 
-    auto labelCtor = loader.demandMethod("QLabel", "QLabel", "const QString&",
+    auto widgetCtor = loader.demandMethod("QWidget", "QWidget",
        "QWidget*", "QFlags<Qt::WindowType>");
 
     auto showMethod = loader.demandMethod("QWidget", "show");
@@ -28,10 +28,13 @@ int main() {
 
     auto app = appCtor(null, &cArgs.argc, cArgs.argv).s_voidp;
 
+    auto widget = widgetCtor(null, null, 0).s_voidp;
+
+    showMethod(widget);
 
     // Almost works...
 
-    appExec(app);
+    appExec(null);
 
     return 0;
 }

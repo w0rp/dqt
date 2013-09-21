@@ -10,6 +10,29 @@
     #define SMOKEC_EXPORT
 #endif
 
+class NullBinding : public SmokeBinding {
+private:
+    NullBinding() : SmokeBinding(NULL) {}
+    NullBinding(const NullBinding &);
+    void operator=(const NullBinding &);
+public:
+    static NullBinding& getInstance() {
+        static NullBinding instance;
+
+        return instance;
+    }
+
+    virtual void deleted(Smoke::Index classId, void *obj)  {}
+
+    virtual bool callMethod(Smoke::Index method, void *obj, Smoke::Stack args, bool isAbstract = false) {
+        return false;
+    }
+
+    virtual char* className(Smoke::Index classId) {
+        return "";
+    }
+};
+
 // The function definitions pretty much just
 // cast things around and call the right methods.
 
@@ -52,5 +75,13 @@ SMOKEC_EXPORT void dqt_call_EnumFn(void* enumFn, int enumOperation, short index,
         *ptrRef,
         *longRef
     );
+}
+
+SMOKEC_EXPORT void dqt_bind_instance(void* classFn, void* object) {
+    Smoke::StackItem bindingStack[2];
+
+    bindingStack[1].s_voidp = &NullBinding::getInstance();
+
+    return static_cast<Smoke::ClassFn>(classFn)(0, object, bindingStack);
 }
 

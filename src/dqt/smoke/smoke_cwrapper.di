@@ -26,3 +26,5 @@ extern(C) extern __gshared void* dqt_call_CastFn(
     void* castFn, void* obj, short from, short to);
 extern(C) extern __gshared void dqt_call_EnumFn(
     void* enumFn, int enumOp, short index, void** ptrRef, c_long* longRef);
+
+extern(C) extern __gshared void dqt_bind_instance(void* classFn, void* object);
