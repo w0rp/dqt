@@ -38,28 +38,18 @@ if (is(V2 : V1)) {
 
 struct MethodFunctor {
 private:
-    const ClassData _classData;
-    const(Smoke.Method*) _method;
-    const string _methodName;
+    const Smoke.ClassFn _classFn;
+    const Smoke.Method* _method;
 
     pure @safe nothrow
-    this(const ClassData classData, const(Smoke.Method*) method,
-    const string methodName) {
-        _classData = classData;
+    this(const Smoke.ClassFn classFn, const Smoke.Method* method) {
+        _classFn = classFn;
         _method = method;
-        _methodName = methodName;
     }
 public:
-    @disable this();
-
-    pure @safe nothrow
-    static MethodFunctor nullObject() {
-        return MethodFunctor(null, null, null);
-    }
-
     @property pure @safe nothrow
     public bool isNull() const {
-        return _classData is null;
+        return _classFn is null;
     }
 
     @property pure @safe nothrow
@@ -68,14 +58,6 @@ public:
         assert(!isNull);
     } body {
         return _method;
-    }
-
-    @property pure @safe nothrow
-    const string name() const
-    in {
-        assert(!isNull);
-    } body {
-        return _methodName;
     }
 
     Smoke.StackItem opCall(A...)(A a) if (is(A[0] : void*))
@@ -88,12 +70,11 @@ public:
         auto stack = createSmokeStack(a[1 .. $]);
 
         // Forward the call to the C wrapper.
-        dqt_call_ClassFn(_classData._cls.classFn,
-            _method.method, a[0], stack.ptr);
+        dqt_call_ClassFn(_classFn, _method.method, a[0], stack.ptr);
 
         if (method.isConstructor) {
             // Smoke requires an extra call to make constructors work.
-            dqt_bind_instance(_classData._cls.classFn, stack[0].s_voidp);
+            dqt_bind_instance(_classFn, stack[0].s_voidp);
         }
 
         return stack[0];
@@ -178,9 +159,7 @@ private:
             classData.addMethod(methodName, &meth);
         }
     }
-
 public:
-    @disable this();
     @disable this(this);
 
     @trusted
@@ -224,7 +203,7 @@ public:
         auto classData = _classMap.get(className, null);
 
         if (classData is null) {
-            return MethodFunctor.nullObject();
+            return MethodFunctor.init;
         }
 
         debug {
@@ -260,10 +239,10 @@ public:
                 }
             }
 
-            return MethodFunctor(classData, meth, methodName);
+            return MethodFunctor(classData._cls.classFn, meth);
         }
 
-        return MethodFunctor.nullObject();
+        return MethodFunctor.init;
     }
 
     pure @trusted
@@ -277,5 +256,27 @@ public:
         enforce(!functor.isNull, "Demanded method not found!");
 
         return functor;
+    }
+}
+
+struct QStringHandle {
+private:
+    void* _ptr;
+public:
+    @property @safe nothrow
+    void* ptr() {
+        return _ptr;
+    }
+
+    @disable this();
+    @disable this(this);
+
+    this(wstring text) {
+        _ptr = dqt_init_QString_reference(
+            cast(const(short*)) text.ptr, text.length);
+    }
+
+    ~this() {
+        dqt_delete_QString_reference(_ptr);
     }
 }
