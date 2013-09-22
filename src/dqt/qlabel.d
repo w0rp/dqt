@@ -12,9 +12,11 @@ MethodFunctor qLabelCTOR;
 MethodFunctor qLabelDTOR;
 
 shared static this() {
-    qLabelCTOR = qtSmokeLoader.demandMethod("QLabel", "QLabel",
-       "const QString&", "QWidget*", "QFlags<Qt::WindowType>");
-    qLabelDTOR = qtSmokeLoader.demandMethod("QLabel", "~QLabel");
+    auto cls = qtSmokeLoader.demandClass("QLabel");
+
+    qLabelCTOR = cls.demandMethod("QLabel", "const QString&",
+        "QWidget*", "QFlags<Qt::WindowType>");
+    qLabelDTOR = cls.demandMethod("~QLabel");
 }
 
 public:

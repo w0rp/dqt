@@ -9,9 +9,11 @@ MethodFunctor qObjectDTOR;
 MethodFunctor qObjectParent;
 
 shared static this() {
-    qObjectCTOR = qtSmokeLoader.demandMethod("QObject", "QObject", "QObject*");
-    qObjectDTOR = qtSmokeLoader.demandMethod("QObject", "~QObject");
-    qObjectParent = qtSmokeLoader.demandMethod("QObject", "parent");
+    auto cls = qtSmokeLoader.demandClass("QObject");
+
+    qObjectCTOR = cls.demandMethod("QObject", "QObject*");
+    qObjectDTOR = cls.demandMethod("~QObject");
+    qObjectParent = cls.demandMethod("parent");
 }
 
 package:

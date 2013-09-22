@@ -11,12 +11,12 @@ MethodFunctor qApplicationDTOR;
 MethodFunctor qApplicationExec;
 
 shared static this() {
-    qApplicationCTOR = qtSmokeLoader.demandMethod(
-        "QApplication", "QApplication", "int&", "char**");
-    qApplicationDTOR = qtSmokeLoader.demandMethod(
-        "QApplication", "~QApplication");
-    qApplicationExec = qtSmokeLoader.demandMethod(
-        "QApplication", "exec");
+    auto cls = qtSmokeLoader.demandClass("QApplication");
+
+    qApplicationCTOR = cls.demandMethod(
+        "QApplication", "int&", "char**");
+    qApplicationDTOR = cls.demandMethod("~QApplication");
+    qApplicationExec = cls.demandMethod("exec");
 }
 
 public:

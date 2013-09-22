@@ -11,9 +11,11 @@ MethodFunctor qFrameCTOR;
 MethodFunctor qFrameDTOR;
 
 shared static this() {
-    qFrameCTOR = qtSmokeLoader.demandMethod("QFrame", "QFrame",
+    auto cls = qtSmokeLoader.demandClass("QFrame");
+
+    qFrameCTOR = cls.demandMethod("QFrame",
         "QWidget*", "QFlags<Qt::WindowType>");
-    qFrameDTOR = qtSmokeLoader.demandMethod("QFrame", "~QFrame");
+    qFrameDTOR = cls.demandMethod("~QFrame");
 }
 
 public:

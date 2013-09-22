@@ -81,13 +81,13 @@ public:
     }
 }
 
-private final class ClassData {
+final class ClassData {
 private:
     const(Smoke*) _smoke;
     const(Smoke.Class*) _cls;
     // We'll pack some methods in here, which may have many overloads.
     const(Smoke.Method*)[][string] _overloadedMethodMap;
-public:
+
     pure @safe nothrow
     this(const(Smoke*) smoke, const(Smoke.Class*) cls)
     in {
@@ -108,6 +108,57 @@ public:
         auto ptr = methodName in _overloadedMethodMap;
 
         return ptr !is null ? *ptr : null;
+    }
+public:
+    pure @trusted
+    MethodFunctor findMethod(string methodName, string[] argumentTypes ...) {
+        import std.c.string;
+
+        methLoop: foreach(meth; methodMatches(methodName)) {
+            if (meth.numArgs != argumentTypes.length) {
+                continue;
+            }
+
+            debug {
+                writeln("Possible method match...");
+                writeln(methodName);
+            }
+
+            // Slice the argument index list out.
+            auto argIndexList = _smoke._argumentList[
+                meth.args .. meth.args + meth.numArgs];
+
+            foreach(i, argIndex; argIndexList) {
+                // Skip to the type pointer.
+                auto type = _smoke._types + argIndex;
+
+                debug {
+                    writefln("Type name: %s", type.name.toSlice);
+                }
+
+                // TODO: Include const and & here?
+
+                if (strcmp(argumentTypes[i].ptr, type.name)) {
+                    continue methLoop;
+                }
+            }
+
+            return MethodFunctor(_cls.classFn, meth);
+        }
+
+        return MethodFunctor.init;
+    }
+
+
+    pure @trusted
+    MethodFunctor demandMethod(string methodName, string[] argumentTypes ...) {
+        import std.exception;
+
+        MethodFunctor functor = findMethod(methodName, argumentTypes);
+
+        enforce(!functor.isNull, "Demanded method not found!");
+
+        return functor;
     }
 }
 
@@ -196,66 +247,19 @@ public:
     }
 
     pure @trusted
-    MethodFunctor findMethod(string className, string methodName,
-    string[] argumentTypes ...) {
-        import std.c.string;
-
-        auto classData = _classMap.get(className, null);
-
-        if (classData is null) {
-            return MethodFunctor.init;
-        }
-
-        debug {
-            writeln("class found!");
-        }
-
-        methLoop: foreach(meth; classData.methodMatches(methodName)) {
-            if (meth.numArgs != argumentTypes.length) {
-                continue;
-            }
-
-            debug {
-                writeln("Possible method match...");
-                writeln(methodName);
-            }
-
-            // Slice the argument index list out.
-            auto argIndexList = classData._smoke._argumentList[
-                meth.args .. meth.args + meth.numArgs];
-
-            foreach(i, argIndex; argIndexList) {
-                // Skip to the type pointer.
-                auto type = classData._smoke._types + argIndex;
-
-                debug {
-                    writefln("Type name: %s", type.name.toSlice);
-                }
-
-                // TODO: Include const and & here?
-
-                if (strcmp(argumentTypes[i].ptr, type.name)) {
-                    continue methLoop;
-                }
-            }
-
-            return MethodFunctor(classData._cls.classFn, meth);
-        }
-
-        return MethodFunctor.init;
+    ClassData findClass(string className) {
+        return _classMap.get(className, null);
     }
 
     pure @trusted
-    MethodFunctor demandMethod(string className, string methodName,
-    string[] argumentTypes ...) {
+    ClassData demandClass(string className) {
         import std.exception;
 
-        MethodFunctor functor =
-            findMethod(className, methodName, argumentTypes);
+        ClassData cls = findClass(className);
 
-        enforce(!functor.isNull, "Demanded method not found!");
+        enforce(cls !is null, "Demanded class not found!");
 
-        return functor;
+        return cls;
     }
 }
 

@@ -4,7 +4,8 @@ import dqt.smoke.all;
 
 package:
 
-public import dqt.smoke.smokeqt_loader : MethodFunctor, QStringHandle;
+public import dqt.smoke.smokeqt_loader :
+    MethodFunctor, ClassData, QStringHandle;
 
 SmokeLoader qtSmokeLoader;
 

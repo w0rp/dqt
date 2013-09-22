@@ -12,10 +12,12 @@ MethodFunctor qWidgetDTOR;
 MethodFunctor qWidgetShow;
 
 shared static this() {
-    qWidgetCTOR = qtSmokeLoader.demandMethod("QWidget", "QWidget",
+    auto cls = qtSmokeLoader.demandClass("QWidget");
+
+    qWidgetCTOR = cls.demandMethod("QWidget",
         "QWidget*", "QFlags<Qt::WindowType>");
-    qWidgetDTOR = qtSmokeLoader.demandMethod("QWidget", "~QWidget");
-    qWidgetShow = qtSmokeLoader.demandMethod("QWidget", "show");
+    qWidgetDTOR = cls.demandMethod("~QWidget");
+    qWidgetShow = cls.demandMethod("show");
 }
 
 public:
