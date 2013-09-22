@@ -30,8 +30,9 @@ SMOKEC_SPEC void dqt_call_EnumFn(void* enumFn, int enumOperation, short index,
     void** ptrRef, long* longRef);
 SMOKEC_SPEC void dqt_bind_instance(void* classFn, void* object);
 
-SMOKEC_SPEC void* dqt_init_QString_reference(const short* data, int size);
-SMOKEC_SPEC void dqt_delete_QString_reference(void* qString);
+SMOKEC_SPEC void* dqt_init_QString_utf16_reference(const short* data, int size);
+SMOKEC_SPEC void* dqt_init_QString_utf8_copy(const char* data, int size);
+SMOKEC_SPEC void dqt_delete_QString(void* qString);
 
 #ifdef __cplusplus
 }

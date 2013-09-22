@@ -22,18 +22,24 @@ shared static this() {
 public:
 
 class QLabel : QFrame {
+private:
+    this(QStringHandle text, QWidget parent = null, WindowType f = WindowType.Widget) {
+        this(Nothing.init);
+
+        _data = qLabelCTOR(null, text.ptr,
+            parent.dataOrNull, cast(int) f).s_voidp;
+    }
 package:
     this(Nothing nothing) {
         super(Nothing.init);
     }
 public:
     this(wstring text, QWidget parent = null, WindowType f = WindowType.Widget) {
-        this(Nothing.init);
+        this(QStringHandle(text), parent, f);
+    }
 
-        auto textQString = QStringHandle(text);
-
-        _data = qLabelCTOR(null, textQString.ptr,
-            parent.dataOrNull, cast(int) f).s_voidp;
+    this(string text, QWidget parent = null, WindowType f = WindowType.Widget) {
+        this(QStringHandle(text), parent, f);
     }
 
     ~this() {

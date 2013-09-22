@@ -276,11 +276,15 @@ public:
     @disable this(this);
 
     this(wstring text) {
-        _ptr = dqt_init_QString_reference(
+        _ptr = dqt_init_QString_utf16_reference(
             cast(const(short*)) text.ptr, text.length);
     }
 
+    this(string text) {
+        _ptr = dqt_init_QString_utf8_copy(text.ptr, text.length);
+    }
+
     ~this() {
-        dqt_delete_QString_reference(_ptr);
+        dqt_delete_QString(_ptr);
     }
 }

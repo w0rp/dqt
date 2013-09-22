@@ -92,7 +92,7 @@ SMOKEC_EXPORT void dqt_bind_instance(void* classFn, void* object) {
     return static_cast<Smoke::ClassFn>(classFn)(0, object, bindingStack);
 }
 
-SMOKEC_SPEC void* dqt_init_QString_reference(const short* data, int size) {
+SMOKEC_SPEC void* dqt_init_QString_utf16_reference(const short* data, int size) {
     // fromRawData creates a QString from UTF-16 data without copying it.
     // QString(const QString&) creates a QString without copying the data.
     // We put this non-copy on the heap so D can use it.
@@ -101,7 +101,12 @@ SMOKEC_SPEC void* dqt_init_QString_reference(const short* data, int size) {
         QString::fromRawData(reinterpret_cast<const QChar*>(data), size));
 }
 
-SMOKEC_SPEC void dqt_delete_QString_reference(void* qString) {
+SMOKEC_SPEC void* dqt_init_QString_utf8_copy(const char* data, int size) {
+    return new QString(
+        QString::fromUtf8(data, size));
+}
+
+SMOKEC_SPEC void dqt_delete_QString(void* qString) {
     delete static_cast<QString*>(qString);
 }
 
