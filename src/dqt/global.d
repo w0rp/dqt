@@ -8,7 +8,7 @@ public import dqt.smoke.smokeqt_loader : MethodFunctor, QStringHandle;
 
 SmokeLoader qtSmokeLoader;
 
-class Nothing {}
+enum Nothing : byte { nothing }
 
 shared static this() {
     qtSmokeLoader = SmokeLoader(QtLibraryFlag.all);
