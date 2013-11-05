@@ -32,7 +32,7 @@ public:
     }
 
     virtual char* className(Smoke::Index classId) {
-        return "";
+        return 0;
     }
 };
 
@@ -65,18 +65,18 @@ SMOKEC_EXPORT void* dqt_fetch_qtgui_Smoke() {
 
 SMOKEC_EXPORT void dqt_call_ClassFn(void* classFn, short method, void* obj,
 void* args) {
-    static_cast<Smoke::ClassFn>(classFn)(
+    reinterpret_cast<Smoke::ClassFn>(classFn)(
         method, obj, static_cast<Smoke::Stack>(args));
 }
 
 SMOKEC_EXPORT void* dqt_call_CastFn(void* castFn, void* obj, short from,
 short to) {
-    return static_cast<Smoke::CastFn>(castFn)(obj, from, to);
+    return reinterpret_cast<Smoke::CastFn>(castFn)(obj, from, to);
 }
 
 SMOKEC_EXPORT void dqt_call_EnumFn(void* enumFn, int enumOperation,
 short index, void** ptrRef, long* longRef) {
-    static_cast<Smoke::EnumFn>(enumFn)(
+    reinterpret_cast<Smoke::EnumFn>(enumFn)(
         static_cast<Smoke::EnumOperation>(enumOperation),
         index,
         *ptrRef,
@@ -89,7 +89,7 @@ SMOKEC_EXPORT void dqt_bind_instance(void* classFn, void* object) {
 
     bindingStack[1].s_voidp = &NullBinding::getInstance();
 
-    return static_cast<Smoke::ClassFn>(classFn)(0, object, bindingStack);
+    return reinterpret_cast<Smoke::ClassFn>(classFn)(0, object, bindingStack);
 }
 
 SMOKEC_SPEC void* dqt_init_QString_utf16_reference(const short* data, int size) {
