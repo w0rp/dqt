@@ -5,22 +5,30 @@ import core.stdc.config : c_long, c_ulong;
 import dqt.smoke.smoke;
 import dqt.smoke.smoke_cwrapper;
 
+// This function is very general, and belongs elsewhere.
+pure @system nothrow
+inout(char)[] toSlice(inout(char)* cString) {
+    import std.c.string;
+
+    return cString == null ? null : cString[0 .. strlen(cString)];
+}
+
 @property pure @safe nothrow
 const(char*) moduleName(const(Smoke*) smoke) {
     return smoke._moduleName;
 }
 
-@property pure @safe nothrow
+@property pure @trusted nothrow
 package const(Smoke.Class)[] classList(const(Smoke*) smoke) {
     return smoke._classes[0 .. smoke._numClasses];
 }
 
-@property pure @safe nothrow
+@property pure @trusted nothrow
 package const(Smoke.Method)[] methodList(const(Smoke*) smoke) {
     return smoke._methods[0 .. smoke._numMethods];
 }
 
-@property pure @safe nothrow
+@property pure @trusted nothrow
 package const(char*)[] methodNameList(const(Smoke*) smoke) {
     return smoke._methodNames[0 .. smoke._numMethodNames];
 }

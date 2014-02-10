@@ -149,7 +149,6 @@ public:
         return MethodFunctor.init;
     }
 
-
     pure @trusted
     MethodFunctor demandMethod(string methodName, string[] argumentTypes ...) {
         import std.exception;

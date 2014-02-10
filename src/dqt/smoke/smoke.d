@@ -170,7 +170,7 @@ public:
         /// Whether the class is in another module.
         bool external;
         /// Index into inheritanceList
-        Index parents;
+        Index _parents;
         /// Calls any method in the class
         ClassFn classFn;
         /// Handles enum pointers
