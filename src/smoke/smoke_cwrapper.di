@@ -1,8 +1,8 @@
-module dqt.smoke.smoke_cwrapper;
+module smoke.smoke_cwrapper;
 
 import core.stdc.config : c_long, c_ulong;
 
-import dqt.smoke.smoke;
+import smoke.smoke;
 
 // Declare C wrapper functions.
 

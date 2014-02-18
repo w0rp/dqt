@@ -1,9 +1,9 @@
-module dqt.smoke.smoke_util;
+module smoke.smoke_util;
 
 import core.stdc.config : c_long, c_ulong;
 
-import dqt.smoke.smoke;
-import dqt.smoke.smoke_cwrapper;
+import smoke.smoke;
+import smoke.smoke_cwrapper;
 
 // This function is very general, and belongs elsewhere.
 pure @system nothrow

@@ -1,4 +1,4 @@
-module dqt.smoke.smoke;
+module smoke.smoke;
 
 import core.stdc.config : c_long, c_ulong;
 

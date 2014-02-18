@@ -1,13 +1,13 @@
-module dqt.smoke.smokeqt_loader;
+module smoke.smokeqt_loader;
 
 import std.algorithm;
 import std.array;
 import std.typecons;
 import std.stdio;
 
-import dqt.smoke.smoke;
-import dqt.smoke.smoke_util;
-import dqt.smoke.smoke_cwrapper;
+import smoke.smoke;
+import smoke.smoke_util;
+import smoke.smoke_cwrapper;
 
 // These functions are very general, and belong elsewhere.
 pure @system nothrow

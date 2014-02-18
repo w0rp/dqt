@@ -1,12 +1,12 @@
-module dqt.smoke.smoke_container;
+module smoke.smoke_container;
 
 import std.stdio;
 import std.array;
 import std.exception;
 
-import dqt.smoke.smoke;
-import dqt.smoke.smoke_cwrapper;
-import dqt.smoke.smoke_util;
+import smoke.smoke;
+import smoke.smoke_cwrapper;
+import smoke.smoke_util;
 
 @trusted
 private long loadEnumValue(Smoke* smoke, Smoke.Method* smokeMethod) pure {

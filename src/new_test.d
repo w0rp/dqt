@@ -1,6 +1,6 @@
-import dqt.smoke.smoke;
-import dqt.smoke.smoke_cwrapper;
-import dqt.smoke.smoke_container;
+import smoke.smoke;
+import smoke.smoke_cwrapper;
+import smoke.smoke_container;
 
 import std.exception;
 import std.stdio;
