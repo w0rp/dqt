@@ -2,6 +2,7 @@ import smoke.smoke;
 import smoke.smoke_cwrapper;
 import smoke.smoke_container;
 import smoke.smoke_generator;
+import smoke.smoke_loader;
 
 import std.algorithm;
 import std.string;

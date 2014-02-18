@@ -1,4 +1,4 @@
-module smoke.smokeqt_loader;
+module smoke.smoke_loader;
 
 import std.algorithm;
 import std.array;
@@ -60,7 +60,8 @@ public:
         return _method;
     }
 
-    Smoke.StackItem opCall(A...)(A a) if (is(A[0] : void*))
+    Smoke.StackItem opCall(A...)(A a) const
+    if (is(A[0] : void*))
     in {
         assert(!method.isInstance || a[0] !is null,
             "null pointer for smoke object, expected instance pointer!");
@@ -104,14 +105,15 @@ private:
     }
 
     pure @safe nothrow
-    const(Smoke.Method*)[] methodMatches(string methodName) {
+    const(Smoke.Method*)[] methodMatches(string methodName) const {
         auto ptr = methodName in _overloadedMethodMap;
 
         return ptr !is null ? *ptr : null;
     }
 public:
     pure @trusted
-    MethodFunctor findMethod(string methodName, string[] argumentTypes ...) {
+    const(MethodFunctor) findMethod
+    (string methodName, string[] argumentTypes ...) const {
         import std.c.string;
 
         methLoop: foreach(meth; methodMatches(methodName)) {
@@ -150,7 +152,8 @@ public:
     }
 
     pure @trusted
-    MethodFunctor demandMethod(string methodName, string[] argumentTypes ...) {
+    const(MethodFunctor) demandMethod
+    (string methodName, string[] argumentTypes ...) const {
         import std.exception;
 
         MethodFunctor functor = findMethod(methodName, argumentTypes);
@@ -209,81 +212,35 @@ private:
             classData.addMethod(methodName, &meth);
         }
     }
+
 public:
+    @trusted pure
+    static immutable(SmokeLoader) create(Smoke*[] smokeList ...) {
+        SmokeLoader loader;
+
+        foreach(smoke; smokeList) {
+            loader.loadClassMethodData(smoke);
+        }
+
+        // FIXME: This cast shouldn't be needed.
+        return cast(immutable(SmokeLoader)) loader;
+    }
+
     @disable this(this);
 
-    @trusted
-    this(QtLibraryFlag libraryFlags) {
-        _libraryFlags = libraryFlags;
-
-        if (_libraryFlags & QtLibraryFlag.qtcore) {
-            dqt_init_qtcore_Smoke();
-        }
-
-        if (_libraryFlags & QtLibraryFlag.qtgui) {
-            dqt_init_qtgui_Smoke();
-        }
-
-        // TODO: We can probably load straight after the init, verify this.
-        if (_libraryFlags & QtLibraryFlag.qtcore) {
-            loadClassMethodData(cast(Smoke*) dqt_fetch_qtcore_Smoke());
-        }
-
-        if (_libraryFlags & QtLibraryFlag.qtgui) {
-            loadClassMethodData(cast(Smoke*) dqt_fetch_qtgui_Smoke());
-        }
-    }
-
-    @trusted
-    ~this() {
-        if (_libraryFlags & QtLibraryFlag.qtcore) {
-            dqt_delete_qtcore_Smoke();
-        }
-
-        if (_libraryFlags & QtLibraryFlag.qtgui) {
-            dqt_delete_qtgui_Smoke();
-        }
-    }
-
     pure @trusted
-    ClassData findClass(string className) {
+    const(ClassData) findClass(string className) const {
         return _classMap.get(className, null);
     }
 
     pure @trusted
-    ClassData demandClass(string className) {
+    const(ClassData) demandClass(string className) const {
         import std.exception;
 
-        ClassData cls = findClass(className);
+        auto cls = findClass(className);
 
         enforce(cls !is null, "Demanded class not found!");
 
         return cls;
-    }
-}
-
-struct QStringHandle {
-private:
-    void* _ptr;
-public:
-    @property @safe nothrow
-    void* ptr() {
-        return _ptr;
-    }
-
-    @disable this();
-    @disable this(this);
-
-    this(wstring text) {
-        _ptr = dqt_init_QString_utf16_reference(
-            cast(const(short*)) text.ptr, cast(int) text.length);
-    }
-
-    this(string text) {
-        _ptr = dqt_init_QString_utf8_copy(text.ptr, cast(int) text.length);
-    }
-
-    ~this() {
-        dqt_delete_QString(_ptr);
     }
 }
