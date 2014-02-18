@@ -167,10 +167,19 @@ public:
         Type _returnType;
         Type[] _argumentTypeList;
         Smoke.MethodFlags _flags;
+        bool _isOverride;
 
         @safe pure nothrow
         this() {}
     public:
+        /**
+         * Returns: true if this method is an override.
+         */
+        @safe pure nothrow
+        @property bool isOverride() const {
+            return _isOverride;
+        }
+
         /**
          * Returns: The name of this method or function as it is in C++.
          */
@@ -590,6 +599,7 @@ private:
 
         Class[string] namedClassMap;
         Enum[string] namedEnumMap;
+        Method[][string][Class] classMethodMap;
 
         @safe
         bool tryNestInClass(T)(string namespace, T value) {
@@ -610,10 +620,64 @@ private:
             return false;
         }
 
+        @safe
+        bool isOverride(Method method) {
+            if (method._cls._parentClassList.length == 0) {
+                return false;
+            }
+
+            foreach(cls; method._cls._parentClassList) {
+                Method[]* matchListPtr = method.name in classMethodMap[cls];
+
+                if (matchListPtr is null) {
+                    // We didn't find any method with this name in the
+                    // parent class, so just skip it.
+                    continue;
+                }
+
+                // Search all methods with the same name.
+                methodLoop: foreach(otherMethod; *matchListPtr) {
+                    if (method._argumentTypeList.length
+                    != otherMethod._argumentTypeList.length) {
+                        // Different number of arguments, carry on.
+                        continue;
+                    }
+
+                    foreach(i, type; method._argumentTypeList) {
+                        auto otherType = otherMethod._argumentTypeList[i];
+
+                        if (type._typeString != otherType._typeString) {
+                            // Argument types don't match, carry on.
+                            continue methodLoop;
+                        }
+                    }
+
+                    // We got this far, it's definitely a match.
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         // Run through everything once to collect it all.
         foreach(_0, metadata; _metadataMap) {
             foreach(_1, cls; metadata._classMap) {
                 namedClassMap[cls.name] = cls;
+
+                Method[][string] methodMap = null;
+
+                foreach(method; cls._methodList) {
+                    Method[]* arrayPtr = method.name in methodMap;
+
+                    if (arrayPtr) {
+                        (*arrayPtr) ~= method;
+                    } else {
+                        methodMap[method.name] = [method];
+                    }
+                }
+
+                classMethodMap[cls] = methodMap;
             }
 
             foreach(_1, enm; metadata._enumMap) {
@@ -632,6 +696,10 @@ private:
                 } else {
                     // Put this class at the top level.
                     _topLevelClassList ~= cls;
+                }
+
+                foreach(method; cls._methodList) {
+                    method._isOverride = isOverride(method);
                 }
             }
 

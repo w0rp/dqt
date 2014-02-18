@@ -156,6 +156,11 @@ private:
         }
 
         foreach(method; cls.methodList) {
+            if (method.isOverride) {
+                // Don't bother writing any method overrides.
+                continue;
+            }
+
             if (isBlacklisted(method)) {
                 continue;
             }
