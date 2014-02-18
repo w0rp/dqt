@@ -32,6 +32,11 @@ string topNameD(string qualifiedName) {
 
 struct SmokeGenerator {
 private:
+    string _moduleName;
+public:
+    string delegate(const(Type) type) basicDTypeFunc;
+    bool delegate(const(Type) type) blackListFunc;
+private:
     void writeIndent(ref File file, int size) {
         if (size == 0) {
             return;
@@ -136,6 +141,12 @@ private:
     void writeClass(ref File file, const Class cls, int indent) {
         writeOpenClass(file, cls, indent);
 
+        if (cls.parentClassList.length == 0) {
+            // Write the data pointer variable into root classes.
+            writeIndent(file, indent + 1);
+            file.writeln("package void* __data;");
+        }
+
         foreach(nestedClass; cls.nestedClassList) {
             writeClass(file, nestedClass, indent + 1);
         }
@@ -145,13 +156,16 @@ private:
         }
 
         foreach(method; cls.methodList) {
+            if (isBlacklisted(method)) {
+                continue;
+            }
+
             writeOpenMethod(file, method, indent + 1);
             writeClose(file, indent + 1);
         }
 
         writeClose(file, indent);
     }
-
 
     void writeImports(ref File file, const(Class) cls) {
         bool[string] nameSet;
@@ -179,6 +193,12 @@ private:
         }
 
         foreach(method; cls.methodList) {
+            if (isBlacklisted(method)) {
+                // If the method is not going to be generated, we shouldn't
+                // consider any types from it for imports at all.
+                continue;
+            }
+
             considerType(method.returnType);
 
             foreach(type; method.argumentTypeList) {
@@ -198,12 +218,52 @@ private:
         }
     }
 
-    string delegate(const(Type) type) basicDTypeFunc;
+    bool isBlacklisted(const(Method) method) {
+        if (isBlacklisted(method.returnType)) {
+            return true;
+        }
+
+        foreach(type; method.argumentTypeList) {
+            if (isBlacklisted(type)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool isBlacklisted(const(Type) type) {
+        return blackListFunc !is null && blackListFunc(type);
+    }
+
+    void writeModuleLine(ref File file) {
+        file.writef(
+            "module %s.%s;\n\n",
+            _moduleName,
+            // Take the end of the module name from the filename
+            file.name.baseName.stripExtension
+        );
+    }
 public:
+    @safe pure
+    @property
+    void moduleName(string name) {
+        // TODO: Check format of name with regex here.
+
+        _moduleName = name;
+    }
+
+    @safe pure nothrow
+    @property
+    string moduleName() const {
+        return _moduleName;
+    }
+
     @trusted
     void writeToDirectory
     (immutable(SmokeContainer) container, string directory) {
         enforce(basicDTypeFunc !is null, "You must set basicDTypeFunc!");
+        enforce(_moduleName.length > 0, "You must set moduleName!");
 
         if (!exists(directory)) {
             mkdir(directory);
@@ -216,6 +276,8 @@ public:
         foreach(cls; container.topLevelClassList) {
             File file = File(filenameForTypename(cls.name.toLower), "w");
 
+            writeModuleLine(file);
+
             writeImports(file, cls);
 
             writeClass(file, cls, 0);
@@ -223,6 +285,8 @@ public:
 
         foreach(enm; container.topLevelEnumList) {
             File file = File(filenameForTypename(enm.name.toLower), "w");
+
+            writeModuleLine(file);
 
             writeEnum(file, enm, 0);
         }
@@ -258,6 +322,20 @@ void main() {
 
         return mappedType(type.unqualifiedTypeString).replace("::", ".");
     };
+
+    generator.blackListFunc = (type) {
+        string cppString = type.unqualifiedTypeString;
+
+        // Don't generate anything mentioning QList, we will have to handle
+        // QList specially as it's a template class.
+        if (cppString.countUntil("QList") >= 0) {
+            return true;
+        }
+
+        return false;
+    };
+
+    generator.moduleName = "dqt";
 
     generator.writeToDirectory(container, "output");
 }
