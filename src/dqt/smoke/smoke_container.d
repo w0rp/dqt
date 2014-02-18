@@ -9,12 +9,16 @@ import dqt.smoke.smoke_cwrapper;
 import dqt.smoke.smoke_util;
 
 @trusted
-private long loadEnumValue(Smoke* smoke, Smoke.Method* smokeMethod) {
+private long loadEnumValue(Smoke* smoke, Smoke.Method* smokeMethod) pure {
     Smoke.Class* smokeClass = smoke._classes + smokeMethod.classID;
 
     auto stack = createSmokeStack();
 
-    dqt_call_ClassFn(smokeClass.classFn, smokeMethod.method, null, stack.ptr);
+    // Cast this to pure. Sure the data is global, but screw it, make it pure.
+    alias extern(C) void function(void*, short, void*, void*) pure PureFunc;
+
+    (cast(PureFunc) &dqt_call_ClassFn)(
+        smokeClass.classFn, smokeMethod.method, null, stack.ptr);
 
     // Get the long value back from the return value of calling a SMOKE
     // function. This is the enum value.
@@ -37,6 +41,22 @@ private string namespaceForName(string name) {
  */
 class SmokeContainer {
 public:
+    /**
+     * Given a sequence of SMOKE data to load, create a SmokeContainer
+     * containing information copied from the SMOKE data.
+     */
+    static immutable(SmokeContainer) create(Smoke*[] smokeList ...) pure {
+        auto container = new SmokeContainer();
+
+        foreach (smoke; smokeList) {
+            container.loadData(smoke);
+        }
+
+        container.finalize();
+
+        return container;
+    }
+
     /**
      * This class is a D representation of a type in C++, taken from Smoke.
      */
@@ -62,6 +82,24 @@ public:
         }
 
         /**
+         * Returns: The string spelling out this type in C++, without
+         * any qualifiers.
+         *
+         * Note: 'void*' will be returned as 'void', as will 'void**'
+         */
+        @safe pure nothrow
+        @property string unqualifiedTypeString() const {
+            int front = cast(int) this.isConst * 6;
+            int end = cast(int) _typeString.length - 1;
+
+            while (_typeString[end] == '*' || _typeString[end] == '&') {
+                --end;
+            }
+
+            return _typeString[front .. end + 1];
+        }
+
+        /**
          * Returns: The class associated with this type, null if no class.
          */
         @safe pure nothrow
@@ -75,6 +113,31 @@ public:
         @safe pure nothrow
         @property bool isPointer() const {
             return (_flags & Smoke.TypeFlags.tf_ptr) != 0;
+        }
+
+        /**
+         * Returns: The dimensionality of this type is a pointer.
+         *
+         * T has a dimensionality of 0.
+         * T* is 1.
+         * T** is 2.
+         * T*** is 3.
+         */
+        @safe pure nothrow
+        @property int pointerDimension() const {
+            if (!this.isPointer) {
+                return 0;
+            }
+
+            // Count the pointers by walking backwards in the string.
+            // The & qualifier will be on the end if it's a reference.
+            int end = cast(int) _typeString.length - 1 - this.isReference;
+
+            while (_typeString[end] == '*') {
+                --end;
+            }
+
+            return cast(int) _typeString.length - (end + 1 + this.isReference);
         }
 
         /**
@@ -109,7 +172,7 @@ public:
         this() {}
     public:
         /**
-         * Returns: The name of this method or function.
+         * Returns: The name of this method or function as it is in C++.
          */
         @safe pure nothrow
         @property string name() const {
@@ -347,6 +410,42 @@ public:
             return _itemList;
         }
     }
+
+    /**
+     * Load data from a Smoke structure. All information will be copied into
+     * this container, so the this container is not dependant on the lifetime
+     * of the Smoke structure.
+     */
+    @trusted
+    void loadData(Smoke* smoke) pure {
+        for (int i = 0; i < smoke._numMethods; ++i) {
+            Smoke.Method* smokeMethod = smoke._methods + i;
+
+            if (smokeMethod.flags & Smoke.MethodFlags.mf_enum) {
+                // This is an enum value.
+                Enum enm = this.getOrCreateEnum(smoke, smokeMethod.ret);
+
+                enm._itemList ~= Enum.Pair(
+                    smoke._methodNames[smokeMethod.name].toSlice.idup,
+                    loadEnumValue(smoke, smokeMethod)
+                );
+            } else if (smokeMethod.name >= 0
+            && smokeMethod.name < smoke._numMethodNames
+            && smokeMethod.classID >= 0
+            && smokeMethod.classID < smoke._numClasses) {
+                // This is a class method.
+
+                // Get the class for this method, create it if needed.
+                Class cls = this.getOrCreateClass(smoke, smokeMethod.classID);
+
+                // Create this method.
+                Method method = this.createMethod(cls, smoke, smokeMethod);
+
+                // Add the method to the list of methods in the class.
+                cls._methodList ~= method;
+            }
+        }
+    }
 private:
     class SmokeMetadata {
         Class[Smoke.Index] _classMap;
@@ -475,66 +574,10 @@ private:
 
         return method;
     }
-public:
+
     @safe pure nothrow
     @property bool isFinalized() const {
         return _finalized;
-    }
-
-    /**
-     * Returns: The list of top level classes contained in this container.
-     */
-    @safe pure
-    @property const(Class[]) topLevelClassList() const {
-        enforce(this.isFinalized, "Call finalize before accessing this.");
-
-        return _topLevelClassList;
-    }
-
-    /**
-     * Returns: The list of top level enums contained in this container.
-     */
-    @safe pure
-    @property const(Enum[]) topLevelEnumList() const {
-        enforce(this.isFinalized, "Call finalize before accessing this.");
-
-        return _topLevelEnumList;
-    }
-
-    /**
-     * Load data from a Smoke structure. All information will be copied into
-     * this container, so the this container is not dependant on the lifetime
-     * of the Smoke structure.
-     */
-    @trusted
-    void loadData(Smoke* smoke) {
-        for (int i = 0; i < smoke._numMethods; ++i) {
-            Smoke.Method* smokeMethod = smoke._methods + i;
-
-            if (smokeMethod.flags & Smoke.MethodFlags.mf_enum) {
-                // This is an enum value.
-                Enum enm = this.getOrCreateEnum(smoke, smokeMethod.ret);
-
-                enm._itemList ~= Enum.Pair(
-                    smoke._methodNames[smokeMethod.name].toSlice.idup,
-                    loadEnumValue(smoke, smokeMethod)
-                );
-            } else if (smokeMethod.name >= 0
-            && smokeMethod.name < smoke._numMethodNames
-            && smokeMethod.classID >= 0
-            && smokeMethod.classID < smoke._numClasses) {
-                // This is a class method.
-
-                // Get the class for this method, create it if needed.
-                Class cls = this.getOrCreateClass(smoke, smokeMethod.classID);
-
-                // Create this method.
-                Method method = this.createMethod(cls, smoke, smokeMethod);
-
-                // Add the method to the list of methods in the class.
-                cls._methodList ~= method;
-            }
-        }
     }
 
     /**
@@ -608,5 +651,25 @@ public:
         // Throw the metadata at the garbage collector, we're done.
         _metadataMap = null;
         _finalized = true;
+    }
+public:
+    /**
+     * Returns: The list of top level classes contained in this container.
+     */
+    @safe pure
+    @property const(Class[]) topLevelClassList() const {
+        enforce(this.isFinalized, "Call finalize before accessing this.");
+
+        return _topLevelClassList;
+    }
+
+    /**
+     * Returns: The list of top level enums contained in this container.
+     */
+    @safe pure
+    @property const(Enum[]) topLevelEnumList() const {
+        enforce(this.isFinalized, "Call finalize before accessing this.");
+
+        return _topLevelEnumList;
     }
 }
