@@ -1,10 +1,11 @@
+module dqt.loader;
 
 import smoke.smoke;
 import smoke.smoke_cwrapper;
 
 public import smoke.smoke_loader;
 
-immutable(SmokeLoader) smokeLoader;
+package immutable(SmokeLoader) smokeLoader;
 
 shared static this() {
     // Just create these and never delete them.

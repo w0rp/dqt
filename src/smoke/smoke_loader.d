@@ -36,52 +36,10 @@ if (is(V2 : V1)) {
     return map[key];
 }
 
-struct MethodFunctor {
-private:
-    const Smoke.ClassFn _classFn;
-    const Smoke.Method* _method;
-
-    pure @safe nothrow
-    this(const Smoke.ClassFn classFn, const Smoke.Method* method) {
-        _classFn = classFn;
-        _method = method;
-    }
-public:
-    @property pure @safe nothrow
-    public bool isNull() const {
-        return _classFn is null;
-    }
-
-    @property pure @safe nothrow
-    const(Smoke.Method*) method() const
-    in {
-        assert(!isNull);
-    } body {
-        return _method;
-    }
-
-    Smoke.StackItem opCall(A...)(A a) const
-    if (is(A[0] : void*))
-    in {
-        assert(!method.isInstance || a[0] !is null,
-            "null pointer for smoke object, expected instance pointer!");
-        assert(a.length - 1 == method.numArgs,
-            "Stack size did not match argument count!");
-    } body {
-        auto stack = createSmokeStack(a[1 .. $]);
-
-        // Forward the call to the C wrapper.
-        dqt_call_ClassFn(_classFn, _method.method, a[0], stack.ptr);
-
-        if (method.isConstructor) {
-            // Smoke requires an extra call to make constructors work.
-            dqt_bind_instance(_classFn, stack[0].s_voidp);
-        }
-
-        return stack[0];
-    }
-}
-
+/**
+ * This class represents a wrapper around SMOKE data for loading
+ * and calling function pointers quickly for a given class.
+ */
 final class ClassData {
 private:
     const(Smoke*) _smoke;
@@ -111,8 +69,12 @@ private:
         return ptr !is null ? *ptr : null;
     }
 public:
-    pure @trusted
-    const(MethodFunctor) findMethod
+    /**
+     * Search for a method with a given name and list of argument types.
+     * The types must be specified exactly as they are in C++.
+     */
+    @trusted pure
+    immutable(Smoke.Method*) findMethod
     (string methodName, string[] argumentTypes ...) const {
         import std.c.string;
 
@@ -145,22 +107,62 @@ public:
                 }
             }
 
-            return MethodFunctor(_cls.classFn, meth);
+            // FIXME: This cast shouldn't be needed.
+            return cast(immutable) meth;
         }
 
-        return MethodFunctor.init;
+        return null;
     }
 
-    pure @trusted
-    const(MethodFunctor) demandMethod
+    /**
+     * Search for a method with a given name and list of argument types.
+     * The types must be specified exactly as they are in C++.
+     *
+     * If the method cannot be found, throw an exception.
+     */
+    @trusted pure
+    immutable(Smoke.Method*) demandMethod
     (string methodName, string[] argumentTypes ...) const {
         import std.exception;
 
-        MethodFunctor functor = findMethod(methodName, argumentTypes);
+        auto method = findMethod(methodName, argumentTypes);
 
-        enforce(!functor.isNull, "Demanded method not found!");
+        enforce(method !is null, "Demanded method not found!");
 
-        return functor;
+        return method;
+    }
+
+    /**
+     * Given a method pointer and some arguments, call a method on
+     * the smoke class.
+     *
+     * Params:
+     *     method = A method pointer identifying the method to call.
+     *     a... = Arguments to call the method with, the first must be the
+     *            pointer to the class instance pointer, this should be null
+     *            if no instance exists. (static methods, etc.)
+     *
+     * Returns: A StackItem representing the return value from C++.
+     */
+    Smoke.StackItem callMethod(A...)(const(Smoke.Method*) method, A a) const
+    if (is(A[0] : void*))
+    in {
+        assert(!method.isInstance || a[0] !is null,
+            "null pointer for smoke object, expected instance pointer!");
+        assert(a.length - 1 == method.numArgs,
+            "Stack size did not match argument count!");
+    } body {
+        auto stack = createSmokeStack(a[1 .. $]);
+
+        // Forward the call to the C wrapper.
+        dqt_call_ClassFn(_cls.classFn, method.method, a[0], stack.ptr);
+
+        if (method.isConstructor) {
+            // Smoke requires an extra call to make constructors work.
+            dqt_bind_instance(_cls.classFn, stack[0].s_voidp);
+        }
+
+        return stack[0];
     }
 }
 
@@ -175,7 +177,7 @@ private:
     ClassData[string] _classMap;
     QtLibraryFlag _libraryFlags;
 
-    pure @trusted
+    @trusted pure
     void loadClassMethodData(Smoke* smoke) {
         auto classList = smoke.classList;
         auto methNameList = smoke.methodNameList;
@@ -223,18 +225,18 @@ public:
         }
 
         // FIXME: This cast shouldn't be needed.
-        return cast(immutable(SmokeLoader)) loader;
+        return cast(immutable) loader;
     }
 
     @disable this(this);
 
     pure @trusted
-    const(ClassData) findClass(string className) const {
-        return _classMap.get(className, null);
+    immutable(ClassData) findClass(string className) const {
+        return cast(immutable) _classMap.get(className, null);
     }
 
     pure @trusted
-    const(ClassData) demandClass(string className) const {
+    immutable(ClassData) demandClass(string className) const {
         import std.exception;
 
         auto cls = findClass(className);
@@ -244,3 +246,6 @@ public:
         return cls;
     }
 }
+
+/// A meaningless value used for skipping constructors in generated files.
+enum Nothing : byte { nothing }

@@ -65,12 +65,22 @@ public:
         string _typeString;
         Smoke.TypeFlags _flags;
         Class _cls;
+        bool _isPrimitive;
 
         @safe pure nothrow
         this(string typeString, Smoke.TypeFlags flags, Class cls) {
             _typeString = typeString;
             _flags = flags;
             _cls = cls;
+        }
+
+        /**
+         * Returns: The type ID for the item, matching type of thing
+         * to pick out of the smoke stack.
+         */
+        @safe pure nothrow
+        @property Smoke.TypeId typeID() const {
+            return cast(Smoke.TypeId)(_flags & Smoke.TypeFlags.tf_elem);
         }
     public:
         /**
@@ -155,6 +165,103 @@ public:
         @property bool isConst() const {
             return (_flags & Smoke.TypeFlags.tf_const) != 0;
         }
+
+        /**
+         * Returns: true if this is a primitive type.
+         */
+        @safe pure nothrow
+        @property bool isPrimitive() const {
+            // Despite my best efforts to check == "void" once early on
+            // it just wouldn't work, so here it is jammed in this method.
+            return _isPrimitive || _typeString == "void";
+        }
+
+        /**
+         * Returns: true if this is an enum type.
+         */
+        @safe pure nothrow
+        @property bool isEnum() const {
+            return typeID == Smoke.TypeId.t_enum;
+        }
+
+        /**
+         * Returns: A string representing the primitive D type matching
+         *     this type. This will be the type without any pointers, etc.,
+         *     so "void*" will be written as "void".
+         */
+        @safe pure nothrow
+        @property string primitiveTypeString() const {
+            with(Smoke.TypeId) final switch (typeID) {
+            case t_voidp:
+                return "void";
+            case t_bool:
+                return "bool";
+            case t_char:
+                return "byte";
+            case t_uchar:
+                return "ubyte";
+            case t_short:
+                return "short";
+            case t_ushort:
+                return "ushort";
+            case t_int:
+                return "int";
+            case t_uint:
+                return "uint";
+            case t_long:
+                return "c_long";
+            case t_ulong:
+                return "c_ulong";
+            case t_float:
+                return "float";
+            case t_double:
+                return "double";
+            case t_enum:
+                return "c_long";
+            case t_class:
+                assert(0, "primitiveTypeString called for t_class" ~ this.typeString);
+            case t_last:
+                assert(0, "primitiveTypeString called for t_last");
+            }
+        }
+
+        @safe pure nothrow
+        @property string stackItemEnumName() const {
+            if (isPointer || isReference) {
+                return "s_voidp";
+            }
+
+            with(Smoke.TypeId) final switch (typeID) {
+            case t_bool:
+                return "s_bool";
+            case t_char:
+                return "s_char";
+            case t_uchar:
+                return "s_uchar";
+            case t_short:
+                return "s_short";
+            case t_ushort:
+                return "s_ushort";
+            case t_int:
+                return "s_int";
+            case t_uint:
+                return "s_uint";
+            case t_long:
+                return "s_long";
+            case t_ulong:
+                return "s_ulong";
+            case t_float:
+                return "s_float";
+            case t_double:
+                return "s_double";
+            case t_enum:
+                return "s_enum";
+            case t_voidp:
+            case t_class:
+            case t_last:
+                return "s_voidp";
+            }
+        }
     }
 
     /**
@@ -197,7 +304,7 @@ public:
         }
 
         /**
-         * Returns: The return type for this method, which may be voidType.
+         * Returns: The return type for this method.
          */
         @safe pure nothrow
         @property const(Type) returnType() const {
@@ -465,7 +572,6 @@ private:
     Class[] _topLevelClassList;
     Enum[] _topLevelEnumList;
     SmokeMetadata[Smoke*] _metadataMap;
-    bool _finalized;
 
     @trusted pure
     void loadParentClassesIntoClass
@@ -584,24 +690,18 @@ private:
         return method;
     }
 
-    @safe pure nothrow
-    @property bool isFinalized() const {
-        return _finalized;
-    }
-
     /**
      * Finalize the Smoke container. This method must be called after loading
      * all of the smoke data required.
      */
     @trusted pure
     void finalize() {
-        enforce(!this.isFinalized, "You cannot finalize the container twice!");
-
         Class[string] namedClassMap;
         Enum[string] namedEnumMap;
         Method[][string][Class] classMethodMap;
+        bool[Type] checkedTypes;
 
-        @safe
+        @safe nothrow
         bool tryNestInClass(T)(string namespace, T value) {
             Class* contPtr = namespace in namedClassMap;
 
@@ -620,10 +720,53 @@ private:
             return false;
         }
 
-        @safe
-        bool isOverride(Method method) {
-            if (method._cls._parentClassList.length == 0) {
+        pure @safe nothrow
+        bool isReallyPrimitive(const(Type) type) {
+            with(Smoke.TypeId) switch (type.typeID) {
+            case t_enum:
+            case t_class:
+            case t_last:
                 return false;
+            default:
+            }
+
+            // Okay, so SMOKE is telling us it's supposed to be
+            // a primitive type. This can be a complete lie, so let's check.
+            // We'll use the version of the type string without any pointers,
+            // references, etc.
+            switch (type.unqualifiedTypeString) {
+            // Some of these are probably never used, but who knows?
+            case "void":
+            case "bool":
+            case "char":
+            case "signed char":
+            case "unsigned char":
+            case "short":
+            case "unsigned short":
+            case "short int":
+            case "unsigned short int":
+            case "int":
+            case "unsigned int":
+            case "long":
+            case "unsigned long":
+            case "long long":
+            case "unsigned long long":
+            case "float":
+            case "double":
+            case "long double":
+            case "size_t":
+            case "wchar_t":
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        @safe nothrow
+        void setFinalMethodFlags
+        (Method method, ref bool[Method] redundantSet) {
+            if (method._cls._parentClassList.length == 0) {
+                return;
             }
 
             foreach(cls; method._cls._parentClassList) {
@@ -652,12 +795,17 @@ private:
                         }
                     }
 
+                    if (!otherMethod.isVirtual) {
+                        // This is supposed to be an override of a non-virtual
+                        // method, so that's nonsense. Get rid of it later.
+                        redundantSet[method] = true;
+                    }
+
                     // We got this far, it's definitely a match.
-                    return true;
+                    method._isOverride = true;
+                    return;
                 }
             }
-
-            return false;
         }
 
         // Run through everything once to collect it all.
@@ -687,6 +835,18 @@ private:
 
         // Now we have everything, run again to build a nested structure.
         foreach(_0, metadata; _metadataMap) {
+            // Run through types to set the isPrimitive flag.
+            // We have to do this because the enum
+            foreach(_1, type; metadata._typeMap) {
+                if (type in checkedTypes) {
+                    continue;
+                }
+
+                checkedTypes[type] = true;
+
+                type._isPrimitive = isReallyPrimitive(type);
+            }
+
             foreach(_1, cls; metadata._classMap) {
                 string namespace = namespaceForName(cls.name);
 
@@ -698,8 +858,29 @@ private:
                     _topLevelClassList ~= cls;
                 }
 
+                bool[Method] redundantSet = null;
+
                 foreach(method; cls._methodList) {
-                    method._isOverride = isOverride(method);
+                    setFinalMethodFlags(method, redundantSet);
+                }
+
+                if (redundantSet.length > 0) {
+                    // We had some redundant methods, so we have to replace
+                    // the method list with another which doesn't
+                    // contain those redundant methods.
+                    auto newMethodList = new Method[
+                        cls._methodList.length - redundantSet.length
+                    ];
+
+                    size_t newIndex = 0;
+
+                    foreach(method; cls._methodList) {
+                        if (method !in redundantSet) {
+                            newMethodList[newIndex++] = method;
+                        }
+                    }
+
+                    cls._methodList = newMethodList;
                 }
             }
 
@@ -718,26 +899,21 @@ private:
 
         // Throw the metadata at the garbage collector, we're done.
         _metadataMap = null;
-        _finalized = true;
     }
 public:
     /**
      * Returns: The list of top level classes contained in this container.
      */
-    @safe pure
+    @safe pure nothrow
     @property const(Class[]) topLevelClassList() const {
-        enforce(this.isFinalized, "Call finalize before accessing this.");
-
         return _topLevelClassList;
     }
 
     /**
      * Returns: The list of top level enums contained in this container.
      */
-    @safe pure
+    @safe pure nothrow
     @property const(Enum[]) topLevelEnumList() const {
-        enforce(this.isFinalized, "Call finalize before accessing this.");
-
         return _topLevelEnumList;
     }
 }
