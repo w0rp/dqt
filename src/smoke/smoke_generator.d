@@ -35,6 +35,7 @@ private string topNameD(string qualifiedName) {
 struct SmokeGenerator {
 private:
     string _moduleName;
+    string _sourceDirectory;
     string _loaderName = "smokeLoader";
 public:
     alias Type = immutable(SmokeContainer.Type);
@@ -53,6 +54,34 @@ public:
      * No methods will be generated which mention a blacklisted type.
      */
     bool delegate(Type type) blackListFunc;
+
+    /**
+     * This delegate will be called if set to generate the names
+     * of wrapper functions to use for passing types to C++. The input
+     * wrapper function will take the type as it is specified in the
+     * argument list of a method.
+     *
+     * The wrapper function should probably be defined in the prefix.d file.
+     *
+     * The result of calling the wrapper function must contain a property
+     * ._data for accessing some data to pass to C++.
+     *
+     * The wrapper should return an empty string to ignore the type.
+     */
+    string delegate(Type type) inputWrapperFunc;
+
+    /**
+     * This delegate will be called if set to generate the names
+     * of wrapper functions to use for converting types from a
+     * Smoke.StackItem to some D type.
+     *
+     * The wrapper function should probably be defined in the prefix.d file.
+     *
+     * The wrapper should return an empty string to ignore the type.
+     */
+    string delegate(Type type) outputWrapperFunc;
+
+    bool delegate(Type type) importBlacklistFunc;
 private:
     enum ReturnType : bool { no, yes }
 
@@ -224,9 +253,21 @@ private:
                 writeIndent(file, indent);
                 file.writef("alias x%d_mapped = x%d;\n", index, index);
             } else {
-                // TODO: Inject input handler here.
+                string wrapper = inputWrapper(type);
+
                 writeIndent(file, indent);
-                file.writef("auto x%d_mapped = x%d._data;\n", index, index);
+
+                if (wrapper.length > 0) {
+                    // RAII types will be held till scope exit.
+                    file.writef("auto x%d_wrapped = %s(x%d);\n",
+                        index, wrapper, index);
+                } else {
+                    file.writef("alias x%d_wrapped = x%d;\n", index, index);
+                }
+
+                writeIndent(file, indent);
+                file.writef("alias x%d_mapped = x%d_wrapped._data;\n",
+                    index, index);
             }
         }
 
@@ -245,25 +286,25 @@ private:
             writeIndent(file, indent);
             file.write("_data = stackResult.void_p;");
         } else if (method.returnType.typeString != "void") {
-            writeIndent(file, indent);
-            file.writef(
-                "alias stackValue = stackResult.%s;\n\n",
-                method.returnType.stackItemEnumName,
-            );
-
             if (method.returnType.isEnum) {
                 // Cast enum values to the right type.
                 writeIndent(file, indent);
                 file.write("auto finalValue = cast(");
                 writeDType(file, method.returnType, ReturnType.yes);
-                file.write(") stackValue;\n");
-            } else if (method.returnType.isPrimitive) {
-                writeIndent(file, indent);
-                file.write("alias finalValue = stackValue;\n");
+                file.write(") stackResult.s_enum;\n");
             } else {
-                // TODO: Inject output handler here.
-                writeIndent(file, indent);
-                file.write("alias finalValue = stackValue;\n");
+                string wrapper = outputWrapper(method.returnType);
+
+                if (wrapper.length > 0) {
+                    writeIndent(file, indent);
+                    file.writef("auto finalValue = %s(stackResult);",
+                        wrapper);
+                } else {
+                    writeIndent(file, indent);
+                    file.writef("alias finalValue = stackResult.%s;\n",
+                        method.returnType.stackItemEnumName,
+                    );
+                }
             }
 
             file.write("\n");
@@ -428,6 +469,10 @@ private:
                 return;
             }
 
+            if (isImportBlacklisted(type)) {
+                return;
+            }
+
             string name = topNameD(basicDTypeFunc(type));
 
             // Add this one to the set.
@@ -468,6 +513,22 @@ private:
         }
     }
 
+    string inputWrapper(Type type) const {
+        if (inputWrapperFunc) {
+            return inputWrapperFunc(type);
+        }
+
+        return "";
+    }
+
+    string outputWrapper(Type type) const {
+        if (outputWrapperFunc) {
+            return outputWrapperFunc(type);
+        }
+
+        return "";
+    }
+
     bool isBlacklisted(Method method) const {
         if (isBlacklisted(method.returnType)) {
             return true;
@@ -484,6 +545,10 @@ private:
 
     bool isBlacklisted(Type type) const {
         return blackListFunc !is null && blackListFunc(type);
+    }
+
+    bool isImportBlacklisted(Type type) const {
+        return importBlacklistFunc !is null && importBlacklistFunc(type);
     }
 
     void writeModuleLine(ref File file) const {
@@ -518,6 +583,18 @@ public:
         return _moduleName;
     }
 
+    @safe pure
+    @property
+    void sourceDirectory(string value) {
+        _sourceDirectory = value;
+    }
+
+    @safe pure nothrow
+    @property
+    string sourceDirectory() const {
+        return _sourceDirectory;
+    }
+
     /**
      * Given some SmokeContainer data, generate D source files in a given
      * directory.
@@ -528,9 +605,12 @@ public:
      */
     @trusted
     void writeToDirectory
-    (immutable(SmokeContainer) container, string directory) {
+    (immutable(SmokeContainer) container, string directory) const {
         enforce(basicDTypeFunc !is null, "You must set basicDTypeFunc!");
         enforce(_moduleName.length > 0, "You must set moduleName!");
+        enforce(_sourceDirectory.length > 0, "You must set sourceDirectory!");
+        enforce(exists(_sourceDirectory) && isDir(_sourceDirectory),
+            "sourceDirectory does not point to a valid directory!");
 
         if (!exists(directory)) {
             mkdir(directory);
@@ -556,6 +636,13 @@ public:
             writeModuleLine(file);
 
             writeEnum(file, enm, 0);
+        }
+
+        // Copy .d files to the output directory from the source directory.
+        foreach(inName; dirEntries(_sourceDirectory, "*.d", SpanMode.shallow)) {
+            if (isFile(inName)) {
+                copy(inName, buildPath(directory, baseName(inName)));
+            }
         }
     }
 }

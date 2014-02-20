@@ -32,6 +32,10 @@ void main() {
                 return cppString[7 .. $ - 1];
             }
 
+            if (cppString == "QString") {
+                return "string";
+            }
+
             return cppString;
         }
 
@@ -50,7 +54,38 @@ void main() {
         return false;
     };
 
-    generator.moduleName = "dqt";
+    generator.importBlacklistFunc = (type) {
+        string cppString = type.unqualifiedTypeString;
 
-    generator.writeToDirectory(container, "output");
+        if (cppString == "QString") {
+            return true;
+        }
+
+        return false;
+    };
+
+    generator.inputWrapperFunc = (type) {
+        string cppString = type.unqualifiedTypeString;
+
+        if (cppString == "QString") {
+            return "QStringInputWrapper";
+        }
+
+        return "";
+    };
+
+    generator.outputWrapperFunc = (type) {
+        string cppString = type.unqualifiedTypeString;
+
+        if (cppString == "QString") {
+            return "qstringOutputWrapper";
+        }
+
+        return "";
+    };
+
+    generator.moduleName = "dqt";
+    generator.sourceDirectory = "dqt_predefined";
+
+    generator.writeToDirectory(container, "dqt");
 }
