@@ -79,7 +79,7 @@ public:
          * to pick out of the smoke stack.
          */
         @safe pure nothrow
-        @property Smoke.TypeId typeID() const {
+        @property Smoke.TypeId typeID() inout {
             return cast(Smoke.TypeId)(_flags & Smoke.TypeFlags.tf_elem);
         }
     public:
@@ -87,7 +87,7 @@ public:
          * Returns: The full string spelling out this type in C++.
          */
         @safe pure nothrow
-        @property string typeString() const {
+        @property string typeString() inout {
             return _typeString;
         }
 
@@ -98,7 +98,7 @@ public:
          * Note: 'void*' will be returned as 'void', as will 'void**'
          */
         @safe pure nothrow
-        @property string unqualifiedTypeString() const {
+        @property string unqualifiedTypeString() inout {
             int front = cast(int) this.isConst * 6;
             int end = cast(int) _typeString.length - 1;
 
@@ -113,7 +113,7 @@ public:
          * Returns: The class associated with this type, null if no class.
          */
         @safe pure nothrow
-        @property const(Class) cls() const {
+        @property inout(Class) cls() inout {
             return _cls;
         }
 
@@ -121,7 +121,7 @@ public:
          * Returns: true if this type is a pointer type.
          */
         @safe pure nothrow
-        @property bool isPointer() const {
+        @property bool isPointer() inout {
             return (_flags & Smoke.TypeFlags.tf_ptr) != 0;
         }
 
@@ -134,7 +134,7 @@ public:
          * T*** is 3.
          */
         @safe pure nothrow
-        @property int pointerDimension() const {
+        @property int pointerDimension() inout {
             if (!this.isPointer) {
                 return 0;
             }
@@ -154,7 +154,7 @@ public:
          * Returns: true if this type is a C++ reference type.
          */
         @safe pure nothrow
-        @property bool isReference() const {
+        @property bool isReference() inout {
             return (_flags & Smoke.TypeFlags.tf_ref) != 0;
         }
 
@@ -162,7 +162,7 @@ public:
          * Returns: true if this type is a C++ const type.
          */
         @safe pure nothrow
-        @property bool isConst() const {
+        @property bool isConst() inout {
             return (_flags & Smoke.TypeFlags.tf_const) != 0;
         }
 
@@ -170,7 +170,7 @@ public:
          * Returns: true if this is a primitive type.
          */
         @safe pure nothrow
-        @property bool isPrimitive() const {
+        @property bool isPrimitive() inout {
             // Despite my best efforts to check == "void" once early on
             // it just wouldn't work, so here it is jammed in this method.
             return _isPrimitive || _typeString == "void";
@@ -180,7 +180,7 @@ public:
          * Returns: true if this is an enum type.
          */
         @safe pure nothrow
-        @property bool isEnum() const {
+        @property bool isEnum() inout {
             return typeID == Smoke.TypeId.t_enum;
         }
 
@@ -190,7 +190,11 @@ public:
          *     so "void*" will be written as "void".
          */
         @safe pure nothrow
-        @property string primitiveTypeString() const {
+            @property string primitiveTypeString() inout {
+            if (_typeString == "void") {
+                return "void";
+            }
+
             with(Smoke.TypeId) final switch (typeID) {
             case t_voidp:
                 return "void";
@@ -226,8 +230,8 @@ public:
         }
 
         @safe pure nothrow
-        @property string stackItemEnumName() const {
-            if (isPointer || isReference) {
+        @property string stackItemEnumName() inout {
+            if (isPointer) {
                 return "s_voidp";
             }
 
@@ -283,7 +287,7 @@ public:
          * Returns: true if this method is an override.
          */
         @safe pure nothrow
-        @property bool isOverride() const {
+        @property bool isOverride() inout {
             return _isOverride;
         }
 
@@ -291,7 +295,7 @@ public:
          * Returns: The name of this method or function as it is in C++.
          */
         @safe pure nothrow
-        @property string name() const {
+        @property string name() inout {
             return _name;
         }
 
@@ -299,7 +303,7 @@ public:
          * Returns: The class object for this method. null if no class.
          */
         @safe pure nothrow
-        @property const(Class) cls() const {
+        @property inout(Class) cls() inout {
             return _cls;
         }
 
@@ -307,7 +311,7 @@ public:
          * Returns: The return type for this method.
          */
         @safe pure nothrow
-        @property const(Type) returnType() const {
+        @property inout(Type) returnType() inout {
             return _returnType;
         }
 
@@ -316,7 +320,7 @@ public:
          *   which may be empty.
          */
         @safe pure nothrow
-        @property const(Type[]) argumentTypeList() const {
+        @property inout(Type[]) argumentTypeList() inout {
             return _argumentTypeList;
         }
 
@@ -324,7 +328,7 @@ public:
          * Returns: True if this method is static.
          */
         @safe pure nothrow
-        @property bool isStatic() const {
+        @property bool isStatic() inout {
             return (_flags & Smoke.MethodFlags.mf_static) != 0;
         }
 
@@ -332,7 +336,7 @@ public:
          * Returns: True if this method is a constructor.
          */
         @safe pure nothrow
-        @property bool isConstructor() const {
+        @property bool isConstructor() inout {
             return (_flags & Smoke.MethodFlags.mf_ctor) != 0;
         }
 
@@ -340,7 +344,7 @@ public:
          * Returns: True if this method is a copy constructor.
          */
         @safe pure nothrow
-        @property bool isCopyConstructor() const {
+        @property bool isCopyConstructor() inout {
             return (_flags & Smoke.MethodFlags.mf_copyctor) != 0;
         }
 
@@ -348,7 +352,7 @@ public:
          * Returns: True if this method is an explicit constructor.
          */
         @safe pure nothrow
-        @property bool isExplicitConstructor() const {
+        @property bool isExplicitConstructor() inout {
             return (_flags & Smoke.MethodFlags.mf_explicit) != 0;
         }
 
@@ -356,7 +360,7 @@ public:
          * Returns: True if this method is a destructor.
          */
         @safe pure nothrow
-        @property bool isDestructor() const {
+        @property bool isDestructor() inout {
             return (_flags & Smoke.MethodFlags.mf_dtor) != 0;
         }
 
@@ -364,7 +368,7 @@ public:
          * Returns: True if this method is virtual.
          */
         @safe pure nothrow
-        @property bool isVirtual() const {
+        @property bool isVirtual() inout {
             return (_flags & Smoke.MethodFlags.mf_virtual) != 0;
         }
 
@@ -372,7 +376,7 @@ public:
          * Returns: True if this method is pure virtual.
          */
         @safe pure nothrow
-        @property bool isPureVirtual() const {
+        @property bool isPureVirtual() inout {
             return (_flags & Smoke.MethodFlags.mf_purevirtual) != 0;
         }
 
@@ -382,7 +386,7 @@ public:
          * Returns: True if this method is a protected method.
          */
         @safe pure nothrow
-        @property bool isProtected() const {
+        @property bool isProtected() inout {
             return (_flags & Smoke.MethodFlags.mf_protected) != 0;
         }
 
@@ -390,7 +394,7 @@ public:
          * Returns: True if this method is const.
          */
         @safe pure nothrow
-        @property bool isConst() const {
+        @property bool isConst() inout {
             return (_flags & Smoke.MethodFlags.mf_const) != 0;
         }
 
@@ -398,7 +402,7 @@ public:
          * Returns: True if this method is a Qt signal.
          */
         @safe pure nothrow
-        @property bool isSignal() const {
+        @property bool isSignal() inout {
             return (_flags & Smoke.MethodFlags.mf_signal) != 0;
         }
 
@@ -406,7 +410,7 @@ public:
          * Returns: True if this method is a Qt slot.
          */
         @safe pure nothrow
-        @property bool isSlot() const {
+        @property bool isSlot() inout {
             return (_flags & Smoke.MethodFlags.mf_slot) != 0;
         }
     }
@@ -438,7 +442,7 @@ public:
          * Returns: The list of parent classes for this class.
          */
         @safe pure nothrow
-        @property const(Class[]) parentClassList() const {
+        @property inout(Class[]) parentClassList() inout {
             return _parentClassList;
         }
 
@@ -446,7 +450,7 @@ public:
          * Returns: A list of classes nested in this class.
          */
         @safe pure nothrow
-        @property const(Class[]) nestedClassList() const {
+        @property inout(Class[]) nestedClassList() inout {
             return _nestedClassList;
         }
 
@@ -454,7 +458,7 @@ public:
          * Returns: A list of enums nested in this class.
          */
         @safe pure nothrow
-        @property const(Enum[]) nestedEnumList() const {
+        @property inout(Enum[]) nestedEnumList() inout {
             return _nestedEnumList;
         }
 
@@ -462,7 +466,7 @@ public:
          * Returns: The name of this class.
          */
         @safe pure nothrow
-        @property string name() const {
+        @property string name() inout {
             return _name;
         }
 
@@ -470,7 +474,7 @@ public:
          * Returns: The list of methods for this class.
          */
         @safe pure nothrow
-        @property const(Method[]) methodList() const {
+        @property inout(Method[]) methodList() inout {
             return _methodList;
         }
     }
@@ -486,7 +490,7 @@ public:
              * Returns: The name for this enum value.
              */
             @safe pure nothrow
-            @property string name() const {
+            @property string name() inout {
                 return _name;
             }
 
@@ -494,13 +498,13 @@ public:
              * Return: The numerical value for this enum value.
              */
             @safe pure nothrow
-            @property long value() const {
+            @property long value() inout {
                 return _value;
             }
         }
     private:
         string _name;
-        const(Pair)[] _itemList;
+        Pair[] _itemList;
 
         @safe pure nothrow
         this() {}
@@ -514,7 +518,7 @@ public:
          * Returns: The name of this enum.
          */
         @safe pure nothrow
-        @property string name() const {
+        @property string name() inout {
             return _name;
         }
 
@@ -522,7 +526,7 @@ public:
          * Returns: A list of pairs for this enum.
          */
         @safe pure nothrow
-        @property const(Pair[]) itemList() const {
+        @property inout(Pair[]) itemList() inout {
             return _itemList;
         }
     }
@@ -905,7 +909,7 @@ public:
      * Returns: The list of top level classes contained in this container.
      */
     @safe pure nothrow
-    @property const(Class[]) topLevelClassList() const {
+    @property inout(Class[]) topLevelClassList() inout {
         return _topLevelClassList;
     }
 
@@ -913,7 +917,7 @@ public:
      * Returns: The list of top level enums contained in this container.
      */
     @safe pure nothrow
-    @property const(Enum[]) topLevelEnumList() const {
+    @property inout(Enum[]) topLevelEnumList() inout {
         return _topLevelEnumList;
     }
 }

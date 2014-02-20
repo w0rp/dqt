@@ -11,11 +11,6 @@ import std.range;
 
 import smoke.smoke_container;
 
-private alias Class = SmokeContainer.Class;
-private alias Enum = SmokeContainer.Enum;
-private alias Method = SmokeContainer.Method;
-private alias Type = SmokeContainer.Type;
-
 private string baseNameCPP(string qualifiedName) {
     auto parts = qualifiedName.split("::");
 
@@ -42,19 +37,26 @@ private:
     string _moduleName;
     string _loaderName = "smokeLoader";
 public:
+    alias Type = immutable(SmokeContainer.Type);
+    alias Class = immutable(SmokeContainer.Class);
+    alias Enum = immutable(SmokeContainer.Enum);
+    alias Method = immutable(SmokeContainer.Method);
+
     /**
      *
      */
-    string delegate(const(Type) type) basicDTypeFunc;
+    string delegate(Type type) basicDTypeFunc;
 
     /**
      * This delegate will be called if set to blacklist types.
      *
      * No methods will be generated which mention a blacklisted type.
      */
-    bool delegate(const(Type) type) blackListFunc;
+    bool delegate(Type type) blackListFunc;
 private:
-    void writeIndent(ref File file, int size) {
+    enum ReturnType : bool { no, yes }
+
+    void writeIndent(ref File file, int size) const {
         if (size == 0) {
             return;
         }
@@ -64,12 +66,12 @@ private:
         }
     }
 
-    void writeClose(ref File file, int indent) {
+    void writeClose(ref File file, int indent) const {
         writeIndent(file, indent);
         file.write("}\n");
     }
 
-    void writeOpenClass(ref File file, const Class cls, int indent) {
+    void writeOpenClass(ref File file, Class cls, int indent) const {
         writeIndent(file, indent);
         file.writef("class %s", baseNameCPP(cls.name));
 
@@ -86,7 +88,7 @@ private:
     }
 
     void writeCPPMethodCommentLine
-    (ref File file, const(Method) method, int indent) {
+    (ref File file, Method method, int indent) const {
         writeIndent(file, indent);
 
         file.write("// ");
@@ -126,17 +128,33 @@ private:
         file.write(";\n");
     }
 
-    void writeDType(ref File file, const(Type) type) {
+    void writeDType
+    (ref File file, Type type, ReturnType returnType) const {
+        if (!returnType && type.isReference) {
+            // D has no reference types, so only write ref
+            // for types when they are arguments.
+            file.write("ref ");
+        }
+
+        if (type.isConst) {
+            file.write("const(");
+        }
+
         if (type.isPrimitive) {
             file.write(type.primitiveTypeString);
         } else {
             file.write(basicDTypeFunc(type));
         }
 
-        file.write(repeat('*').take(type.pointerDimension + type.isReference));
+        if (type.isConst) {
+            file.write(")");
+        }
+
+        file.write(repeat('*').take(type.pointerDimension));
     }
 
-    void writeOpenMethod(ref File file, const(Method) method, int indent) {
+    void writeOpenMethod
+    (ref File file, Method method, int indent) const {
         // When debugging, print the method signature and everything
         // just like it was in C++.
         debug writeCPPMethodCommentLine(file, method, indent);
@@ -168,7 +186,7 @@ private:
         if (method.isConstructor) {
             file.write("this(");
         } else{
-            writeDType(file, method.returnType);
+            writeDType(file, method.returnType, ReturnType.yes);
             file.writef(" %s(", method.name);
         }
 
@@ -177,14 +195,14 @@ private:
                 file.write(", ");
             }
 
-            writeDType(file, type);
+            writeDType(file, type, ReturnType.no);
             file.writef(" x%d", i);
         }
 
         file.write(')');
 
         if (method.isConst) {
-            file.write("const ");
+            file.write(" const");
         }
 
         if (method.isPureVirtual) {
@@ -194,7 +212,8 @@ private:
         }
     }
 
-    void writeMethodBody(ref File file, const(Method) method, int indent) {
+    void writeMethodBody
+    (ref File file, Method method, int indent) const {
         if (method.isConstructor) {
             // Write the super call at the start of constructors.
             writeSuperLine(file, method.cls, indent);
@@ -223,6 +242,7 @@ private:
         if (method.isConstructor) {
             // For constructors, don't return anything and just.
             // set the data pointer to the result.
+            writeIndent(file, indent);
             file.write("_data = stackResult.void_p;");
         } else if (method.returnType.typeString != "void") {
             writeIndent(file, indent);
@@ -235,7 +255,7 @@ private:
                 // Cast enum values to the right type.
                 writeIndent(file, indent);
                 file.write("auto finalValue = cast(");
-                writeDType(file, method.returnType);
+                writeDType(file, method.returnType, ReturnType.yes);
                 file.write(") stackValue;\n");
             } else if (method.returnType.isPrimitive) {
                 writeIndent(file, indent);
@@ -255,12 +275,12 @@ private:
         file.write('\n');
     }
 
-    void writeOpenEnum(ref File file, const Enum enm, int indent) {
+    void writeOpenEnum(ref File file, Enum enm, int indent) const {
         writeIndent(file, indent);
         file.writef("enum %s {\n", baseNameCPP(enm.name));
     }
 
-    void writeEnum(ref File file, const Enum enm, int indent) {
+    void writeEnum(ref File file, Enum enm, int indent) const {
         writeOpenEnum(file, enm, indent);
 
         foreach(pair; enm.itemList) {
@@ -272,13 +292,13 @@ private:
     }
 
     void writeMethodPtrName
-    (ref File file, size_t index, const(Method) method) {
+    (ref File file, size_t index, Method method) const {
         // TODO: Write a more descriptive name here instead.
         file.writef("ptr_%d", index);
     }
 
     void writeStaticClassConstructor
-    (ref File file, const Class cls, int indent) {
+    (ref File file, Class cls, int indent) const {
         // Write the declarations first.
         writeIndent(file, indent);
         file.writeln("private static immutable(ClassData) cls;");
@@ -328,14 +348,14 @@ private:
         file.writeln("}");
     }
 
-    void writeSuperLine(ref File file, const Class cls, int indent) {
+    void writeSuperLine(ref File file, Class cls, int indent) const {
         if (cls.parentClassList.length > 0) {
             writeIndent(file, indent);
             file.writeln("super(Nothing.init);");
         }
     }
 
-    void writeClass(ref File file, const Class cls, int indent) {
+    void writeClass(ref File file, Class cls, int indent) const {
         writeOpenClass(file, cls, indent);
 
         writeStaticClassConstructor(file, cls, indent + 1);
@@ -398,12 +418,12 @@ private:
         writeClose(file, indent);
     }
 
-    void writeImports(ref File file, const(Class) cls) {
+    void writeImports(ref File file, Class cls) const {
         bool[string] nameSet;
 
         // TODO: Inject global imports here with a function.
 
-        void considerType(const(Type) type) {
+        void considerType(Type type) {
             if (type.isPrimitive) {
                 return;
             }
@@ -448,7 +468,7 @@ private:
         }
     }
 
-    bool isBlacklisted(const(Method) method) {
+    bool isBlacklisted(Method method) const {
         if (isBlacklisted(method.returnType)) {
             return true;
         }
@@ -462,11 +482,11 @@ private:
         return false;
     }
 
-    bool isBlacklisted(const(Type) type) {
+    bool isBlacklisted(Type type) const {
         return blackListFunc !is null && blackListFunc(type);
     }
 
-    void writeModuleLine(ref File file) {
+    void writeModuleLine(ref File file) const {
         file.writef(
             "module %s.%s;\n\n",
             _moduleName,
