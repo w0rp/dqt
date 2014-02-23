@@ -189,7 +189,7 @@ private:
 
     void writeDType
     (ref File file, Type type, ReturnType returnType) const {
-        if (!returnType && type.isReference && !type.isPrimitive) {
+        if (!returnType && type.isReference) {
             // D has no reference types, so only write ref
             // for types when they are arguments.
             file.write("ref ");
@@ -335,6 +335,11 @@ private:
 
     void writeMethodBody
     (ref File file, Method method, size_t methodIndex, int indent) const {
+        if (method.isConstructor && method.cls.parentClassList.length > 0) {
+            // Write the super call at the start of constructors.
+            writeSuperLine(file, method.cls, indent);
+        }
+
         // Write aliases so the rest of generation is easy.
         writeIndent(file, indent);
         file.write("alias cls = ");
@@ -348,29 +353,40 @@ private:
 
         if (method.isDestructor) {
             // Destructors are very simple to bind.
+
+            // We'll check for null so the bottom-most desructor
+            // does actual work and the ones above do nothing.
+            writeIndent(file, indent);
+            file.write("if (_data is null) return;\n\n");
+
             writeIndent(file, indent);
             file.write("auto stack = createSmokeStack();\n\n");
 
             writeIndent(file, indent);
-
             file.write("dqt_call_ClassFn("
                 ~ "cast(void*) cls.smokeClass.classFn, "
                 ~ "methPtr.method, "
                 ~ "cast(void*) _data, "
-                ~ "cast(void*) stack.ptr);");
+                ~ "cast(void*) stack.ptr);\n\n");
+
+            // Set null for reasons above.
+            writeIndent(file, indent);
+            file.write("_data = null;\n");
 
             return;
-        }
-
-        if (method.isConstructor && method.cls.parentClassList.length > 0) {
-            // Write the super call at the start of constructors.
-            writeSuperLine(file, method.cls, indent);
         }
 
         foreach(index, type; method.argumentTypeList) {
             if (type.isPrimitive || type.isEnum) {
                 writeIndent(file, indent);
-                file.writef("alias x%d_mapped = x%d;\n", index, index);
+
+                if (type.isReference) {
+                    // References need to be forwarded to C++ by
+                    // passing the address of the ref parameter.
+                    file.writef("auto x%d_mapped = &x%d;\n", index, index);
+                } else {
+                    file.writef("alias x%d_mapped = x%d;\n", index, index);
+                }
             } else {
                 string wrapper = inputWrapper(type);
 
@@ -535,20 +551,22 @@ private:
     enum AbstractImpl { no, yes }
 
     void writeStaticDeclarations(ref File file, Class cls) const {
-        foreach(index, method; cls.methodList) {
-            if (isBlacklisted(method)) {
-                continue;
+        if (cls.methodList.length > 0) {
+            foreach(index, method; cls.methodList) {
+                if (isBlacklisted(method)) {
+                    continue;
+                }
+
+                file.write("package immutable(Smoke.Method*) ");
+                writeMethodPtrName(file, index, method);
+                file.write(";\n");
             }
 
-            file.write("package immutable(Smoke.Method*) ");
-            writeMethodPtrName(file, index, method);
+            // Write the class loader.
+            file.write("package immutable(ClassData) ");
+            writeMetaClassName(file, cls);
             file.write(";\n");
         }
-
-        // Write the class loader.
-        file.write("package immutable(ClassData) ");
-        writeMetaClassName(file, cls);
-        file.write(";\n");
 
         foreach(nestedClass; cls.nestedClassList) {
             writeStaticDeclarations(file, nestedClass);
@@ -556,32 +574,34 @@ private:
     }
 
     void writeStaticAssignments(ref File file, Class cls) const {
-        writeIndent(file, 1);
-        // Write the class loader.
-        writeMetaClassName(file, cls);
-
-        file.writef(
-            " = %s.demandClass(\"%s\");\n\n",
-            _loaderName,
-            cls.name
-        );
-
-        foreach(index, method; cls.methodList) {
-            if (isBlacklisted(method)) {
-                continue;
-            }
-
+        if (cls.methodList.length > 0) {
             writeIndent(file, 1);
-            writeMethodPtrName(file, index, method);
-            file.write(" = ");
+            // Write the class loader.
             writeMetaClassName(file, cls);
-            file.writef(".demandMethod(\"%s\"", method.name);
 
-            foreach(type; method.argumentTypeList) {
-                file.writef(", \"%s\"", type.typeString);
+            file.writef(
+                " = %s.demandClass(\"%s\");\n\n",
+                _loaderName,
+                cls.name
+            );
+
+            foreach(index, method; cls.methodList) {
+                if (isBlacklisted(method)) {
+                    continue;
+                }
+
+                writeIndent(file, 1);
+                writeMethodPtrName(file, index, method);
+                file.write(" = ");
+                writeMetaClassName(file, cls);
+                file.writef(".demandMethod(\"%s\"", method.name);
+
+                foreach(type; method.argumentTypeList) {
+                    file.writef(", \"%s\"", type.typeString);
+                }
+
+                file.write(");\n");
             }
-
-            file.write(");\n");
         }
 
         foreach(nestedClass; cls.nestedClassList) {
