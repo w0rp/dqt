@@ -8,14 +8,10 @@ version(Windows) {
 
 int main() {
     import core.runtime;
-    import std.stdio;
 
     auto cArgs = Runtime.cArgs;
 
     auto app = new QApplication(cArgs.argc, cArgs.argv);
-
-    writeln("test");
-    stdout.flush();
 
     auto x = "Hello World";
 
