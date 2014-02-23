@@ -42,12 +42,43 @@ void main() {
         return mappedType(type.unqualifiedTypeString).replace("::", ".");
     };
 
+    generator.classBlackListFunc = (cls) {
+        switch (cls.name) {
+        case "QIconEngineV2":
+        case "QGraphicsLayout":
+            return true;
+        default:
+            return false;
+        }
+    };
+
     generator.blackListFunc = (type) {
         string cppString = type.unqualifiedTypeString;
 
-        // Don't generate anything mentioning QList, we will have to handle
-        // QList specially as it's a template class.
-        if (cppString.countUntil("QList") >= 0) {
+        switch (cppString) {
+        case "QStringList":
+        case "FT_FaceRec_":
+        case "_XDisplay":
+        case "_XEvent":
+        case "_XRegion":
+        // TODO: Handle QChar with a wrapper.
+        case "QChar":
+        // TODO: Write an implementation of this.
+        case "QStyleOption":
+        // TODO: These were just missing...
+        case "Qt::HitTestAccuracy":
+        case "QGraphicsScene::SceneLayers":
+            return true;
+        default: break;
+        }
+
+        // Filter out template types
+        if (cppString.countUntil("<") >= 0) {
+            return true;
+        }
+
+        // FIXME: Filter out function pointer types until we fix them...
+        if (cppString.countUntil("(") >= 0) {
             return true;
         }
 

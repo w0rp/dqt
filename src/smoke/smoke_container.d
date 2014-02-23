@@ -3,10 +3,12 @@ module smoke.smoke_container;
 import std.stdio;
 import std.array;
 import std.exception;
+import std.functional;
 
 import smoke.smoke;
 import smoke.smoke_cwrapper;
 import smoke.smoke_util;
+import smoke.string_util : toSlice;
 
 @trusted
 private long loadEnumValue(Smoke* smoke, Smoke.Method* smokeMethod) pure {
@@ -99,14 +101,23 @@ public:
          */
         @safe pure nothrow
         @property string unqualifiedTypeString() inout {
-            int front = cast(int) this.isConst * 6;
-            int end = cast(int) _typeString.length - 1;
+            // FIXME: This might be broken for types like this
+            // char * const;
+            int front = isConst * 6;
+            int end = front;
 
-            while (_typeString[end] == '*' || _typeString[end] == '&') {
-                --end;
+            // Scan forwards till we hit a non-identifier character.
+            // Spaces are included for things like 'unsigned char'
+            // Trailing spaces shouldn't be set by SMOKE.
+            for (; end < _typeString.length; ++end) {
+                if (_typeString[end] == '*'
+                || _typeString[end] == '&'
+                || _typeString[end] == '(') {
+                    break;
+                }
             }
 
-            return _typeString[front .. end + 1];
+            return _typeString[front .. end];
         }
 
         /**
@@ -135,19 +146,23 @@ public:
          */
         @safe pure nothrow
         @property int pointerDimension() inout {
-            if (!this.isPointer) {
-                return 0;
+            int pointerCount = 0;
+
+            // We have to search the entire string because C++ pointers can be
+            // like this ...
+            // void**
+            // ... but they can also be like this...
+            // const int* const*
+            foreach(character; _typeString) {
+                if (character == '*') {
+                    ++pointerCount;
+                } else if (character == '(') {
+                    // This is a function pointer.
+                    return 1;
+                }
             }
 
-            // Count the pointers by walking backwards in the string.
-            // The & qualifier will be on the end if it's a reference.
-            int end = cast(int) _typeString.length - 1 - this.isReference;
-
-            while (_typeString[end] == '*') {
-                --end;
-            }
-
-            return cast(int) _typeString.length - (end + 1 + this.isReference);
+            return pointerCount;
         }
 
         /**
@@ -191,78 +206,102 @@ public:
          */
         @safe pure nothrow
             @property string primitiveTypeString() inout {
-            if (_typeString == "void") {
-                return "void";
-            }
+            assert(
+                isPrimitive,
+                "primtiveTypeString called for non primitive!"
+            );
 
-            with(Smoke.TypeId) final switch (typeID) {
-            case t_voidp:
+            switch (unqualifiedTypeString) {
+            case "void":
                 return "void";
-            case t_bool:
-                return "bool";
-            case t_char:
+            case "signed char":
                 return "byte";
-            case t_uchar:
+            case "unsigned char":
                 return "ubyte";
-            case t_short:
+            case "char":
+                return "char";
+            case "wchar_t":
+                return "dchar";
+            case "short":
                 return "short";
-            case t_ushort:
+            case "unsigned short":
                 return "ushort";
-            case t_int:
+            case "int":
                 return "int";
-            case t_uint:
+            case "unsigned":
+            case "unsigned int":
                 return "uint";
-            case t_long:
+            case "long":
                 return "c_long";
-            case t_ulong:
+            case "unsigned long":
                 return "c_ulong";
-            case t_float:
+            case "long long":
+                return "long";
+            case "unsigned long long":
+                return "ulong";
+            case "float":
                 return "float";
-            case t_double:
+            case "double":
                 return "double";
-            case t_enum:
-                return "c_long";
-            case t_class:
-                assert(0, "primitiveTypeString called for t_class" ~ this.typeString);
-            case t_last:
-                assert(0, "primitiveTypeString called for t_last");
+            case "long double":
+                return "real";
+            case "size_t":
+                return "size_t";
+            case "ptrdiff_t":
+                return "ptrdiff_t";
+            case "bool":
+                return "bool";
+            default:
+                assert(0, "Unhandled C++ type: " ~ unqualifiedTypeString);
             }
         }
 
+        /**
+         * Returns: The name of the property that should be used for
+         *     taking the value out of the Smoke.StackItem union.
+         */
         @safe pure nothrow
         @property string stackItemEnumName() inout {
             if (isPointer) {
                 return "s_voidp";
             }
 
-            with(Smoke.TypeId) final switch (typeID) {
-            case t_bool:
-                return "s_bool";
-            case t_char:
+            switch (unqualifiedTypeString) {
+            case "signed char":
                 return "s_char";
-            case t_uchar:
+            case "unsigned char":
                 return "s_uchar";
-            case t_short:
-                return "s_short";
-            case t_ushort:
-                return "s_ushort";
-            case t_int:
+            case "char":
+                return "s_char";
+            case "wchar_t":
                 return "s_int";
-            case t_uint:
+            case "short":
+                return "s_short";
+            case "unsigned short":
+                return "s_ushort";
+            case "int":
+                return "s_int";
+            case "unsigned":
+            case "unsigned int":
                 return "s_uint";
-            case t_long:
+            case "long":
                 return "s_long";
-            case t_ulong:
+            case "unsigned long":
                 return "s_ulong";
-            case t_float:
+            case "long long":
+                return "s_long";
+            case "unsigned long long":
+                return "s_ulong";
+            case "float":
                 return "s_float";
-            case t_double:
+            case "double":
+            case "long double":
                 return "s_double";
-            case t_enum:
-                return "s_enum";
-            case t_voidp:
-            case t_class:
-            case t_last:
+            case "size_t":
+                return "s_ulong";
+            case "bool":
+                return "s_bool";
+            default:
                 return "s_voidp";
             }
         }
@@ -369,6 +408,11 @@ public:
          */
         @safe pure nothrow
         @property bool isVirtual() inout {
+            // I do not trust SMOKE one bit to get this right.
+            if (isPureVirtual) {
+                return true;
+            }
+
             return (_flags & Smoke.MethodFlags.mf_virtual) != 0;
         }
 
@@ -425,6 +469,7 @@ public:
         Method[] _methodList;
         Class[] _nestedClassList;
         Enum[] _nestedEnumList;
+        bool _isAbstract;
 
         @safe pure nothrow
         this() {}
@@ -435,11 +480,18 @@ public:
         }
     public:
         /**
-         * A type in C++ can have zero or more parent classes.
-         * This is different from D, where every class except Object has
-         * only one parent class.
+         * Returns: true if this class is an abstract class.
+         */
+        @safe pure nothrow
+        @property inout(bool) isAbstract() inout {
+            return _isAbstract;
+        }
+
+        /**
+         * Because the class comes from C++, the class can have
+         * multiple parents through multiple inheritance.
          *
-         * Returns: The list of parent classes for this class.
+         * Returns: A list of parent classes for this class.
          */
         @safe pure nothrow
         @property inout(Class[]) parentClassList() inout {
@@ -704,6 +756,7 @@ private:
         Enum[string] namedEnumMap;
         Method[][string][Class] classMethodMap;
         bool[Type] checkedTypes;
+        bool[Class] abstractCache;
 
         @safe nothrow
         bool tryNestInClass(T)(string namespace, T value) {
@@ -866,6 +919,12 @@ private:
 
                 foreach(method; cls._methodList) {
                     setFinalMethodFlags(method, redundantSet);
+
+                    if (method.isAbstract) {
+                        // Mark the class as being an abstract class
+                        // if it contains at least one abstract method.
+                        cls._isAbstract = true;
+                    }
                 }
 
                 if (redundantSet.length > 0) {

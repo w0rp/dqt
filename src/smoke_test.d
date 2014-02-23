@@ -13,7 +13,7 @@ int main() {
 
     auto app = new QApplication(cArgs.argc, cArgs.argv);
 
-    auto label = new QLabel("Hello DQt!");
+    auto label = new QLabel();
 
     label.show();
 

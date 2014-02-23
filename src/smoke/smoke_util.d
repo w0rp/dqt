@@ -2,38 +2,37 @@ module smoke.smoke_util;
 
 import core.stdc.config : c_long, c_ulong;
 
+import std.traits: Unqual;
+
 import smoke.smoke;
 import smoke.smoke_cwrapper;
 
-// This function is very general, and belongs elsewhere.
-pure @system nothrow
-inout(char)[] toSlice(inout(char)* cString) {
-    import std.c.string;
-
-    return cString == null ? null : cString[0 .. strlen(cString)];
-}
-
-@property pure @safe nothrow
+@safe pure nothrow
+@property
 const(char*) moduleName(const(Smoke*) smoke) {
     return smoke._moduleName;
 }
 
-@property pure @trusted nothrow
+@trusted pure nothrow
+@property
 package const(Smoke.Class)[] classList(const(Smoke*) smoke) {
     return smoke._classes[0 .. smoke._numClasses];
 }
 
-@property pure @trusted nothrow
+@trusted pure nothrow
+@property
 package const(Smoke.Method)[] methodList(const(Smoke*) smoke) {
     return smoke._methods[0 .. smoke._numMethods];
 }
 
-@property pure @trusted nothrow
+@trusted pure nothrow
+@property
 package const(char*)[] methodNameList(const(Smoke*) smoke) {
     return smoke._methodNames[0 .. smoke._numMethodNames];
 }
 
-@property pure @safe nothrow
+@safe pure nothrow
+@property
 bool isConstructor (const(Smoke.Method*) meth)
 in {
     assert(meth !is null);
@@ -41,7 +40,8 @@ in {
     return (meth.flags & Smoke.MethodFlags.mf_ctor) != 0;
 }
 
-@property pure @safe nothrow
+@safe pure nothrow
+@property
 bool isStatic (const(Smoke.Method*) meth)
 in {
     assert(meth !is null);
@@ -49,7 +49,8 @@ in {
     return (meth.flags & Smoke.MethodFlags.mf_static) != 0;
 }
 
-@property pure @safe nothrow
+@safe pure nothrow
+@property
 bool isInstance (const(Smoke.Method*) meth)
 in {
     assert(meth !is null);
@@ -69,6 +70,7 @@ in {
  * Returns:
  *    A SMOKE stack item array containing the values given.
  */
+@trusted pure nothrow
 Smoke.StackItem[A.length + 1] createSmokeStack(A...)(A a) {
     import std.traits : isPointer;
 
@@ -81,29 +83,31 @@ Smoke.StackItem[A.length + 1] createSmokeStack(A...)(A a) {
         static if(isPointer!T || is(T == typeof(null))) {
             // The same as s_class
             arr[index + 1].s_voidp = cast(void*) value;
-        } else static if(is(T == bool)) {
+        } else static if(is(Unqual!T == bool)) {
             arr[index + 1].s_bool = value;
-        } else static if(is(T == char) || is(T == byte)) {
+        } else static if(is(Unqual!T == char) || is(Unqual!T == byte)) {
             arr[index + 1].s_char = value;
-        } else static if(is(T == ubyte)) {
+        } else static if(is(Unqual!T == ubyte)) {
             arr[index + 1].s_uchar = value;
-        } else static if(is(T == short)) {
+        } else static if(is(Unqual!T == short)) {
             arr[index + 1].s_short = value;
-        } else static if(is(T == ushort)) {
+        } else static if(is(Unqual!T == ushort)) {
             arr[index + 1].s_ushort = value;
-        } else static if(is(T == int)) {
+        } else static if(is(Unqual!T == int)) {
             arr[index + 1].s_int = value;
-        } else static if(is(T == uint)) {
+        } else static if(is(Unqual!T == uint)) {
             arr[index + 1].s_uint = value;
-        } else static if(is(T == c_long)) {
+        } else static if(is(Unqual!T == c_long)) {
             // The same as s_enum
             arr[index + 1].s_long = value;
-        } else static if(is(T == c_ulong)) {
+        } else static if(is(Unqual!T == c_ulong)) {
             arr[index + 1].s_ulong = value;
-        } else static if(is(T == float)) {
+        } else static if(is(Unqual!T == float)) {
             arr[index + 1].s_float = value;
-        } else static if(is(T == double)) {
+        } else static if(is(Unqual!T == double)) {
             arr[index + 1].s_double = value;
+        } else static if(is(T == enum) && is(T : c_long)) {
+            arr[index + 1].s_enum = value;
         } else {
             static assert(false, "Invalid type for createStack!");
         }

@@ -42,13 +42,13 @@ if (is(V2 : V1)) {
  */
 final class ClassData {
 private:
-    const(Smoke*) _smoke;
-    const(Smoke.Class*) _cls;
+    Smoke* _smoke;
+    Smoke.Class* _cls;
     // We'll pack some methods in here, which may have many overloads.
     const(Smoke.Method*)[][string] _overloadedMethodMap;
 
     pure @safe nothrow
-    this(const(Smoke*) smoke, const(Smoke.Class*) cls)
+    this(Smoke* smoke, Smoke.Class* cls)
     in {
         assert(smoke !is null);
         assert(cls !is null);
@@ -69,6 +69,16 @@ private:
         return ptr !is null ? *ptr : null;
     }
 public:
+    @safe pure nothrow
+    inout(Smoke*) smoke() inout {
+        return _smoke;
+    }
+
+    @safe pure nothrow
+    inout(Smoke.Class*) smokeClass() inout {
+        return _cls;
+    }
+
     /**
      * Search for a method with a given name and list of argument types.
      * The types must be specified exactly as they are in C++.
@@ -127,55 +137,19 @@ public:
 
         auto method = findMethod(methodName, argumentTypes);
 
-        enforce(method !is null, "Demanded method not found!");
+        enforce(
+            method !is null,
+            "Demanded method not found!"
+            ~ "\nMethod was: " ~ methodName
+        );
 
         return method;
     }
-
-    /**
-     * Given a method pointer and some arguments, call a method on
-     * the smoke class.
-     *
-     * Params:
-     *     method = A method pointer identifying the method to call.
-     *     a... = Arguments to call the method with, the first must be the
-     *            pointer to the class instance pointer, this should be null
-     *            if no instance exists. (static methods, etc.)
-     *
-     * Returns: A StackItem representing the return value from C++.
-     */
-    Smoke.StackItem callMethod(A...)(const(Smoke.Method*) method, A a) const
-    if (is(A[0] : void*))
-    in {
-        assert(!method.isInstance || a[0] !is null,
-            "null pointer for smoke object, expected instance pointer!");
-        assert(a.length - 1 == method.numArgs,
-            "Stack size did not match argument count!");
-    } body {
-        auto stack = createSmokeStack(a[1 .. $]);
-
-        // Forward the call to the C wrapper.
-        dqt_call_ClassFn(_cls.classFn, method.method, a[0], stack.ptr);
-
-        if (method.isConstructor) {
-            // Smoke requires an extra call to make constructors work.
-            dqt_bind_instance(_cls.classFn, stack[0].s_voidp);
-        }
-
-        return stack[0];
-    }
-}
-
-enum QtLibraryFlag : uint {
-    qtcore = 0x1,
-    qtgui  = 0x2,
-    all    = uint.max
 }
 
 struct SmokeLoader {
 private:
     ClassData[string] _classMap;
-    QtLibraryFlag _libraryFlags;
 
     @trusted pure
     void loadClassMethodData(Smoke* smoke) {
@@ -241,7 +215,11 @@ public:
 
         auto cls = findClass(className);
 
-        enforce(cls !is null, "Demanded class not found!");
+        enforce(
+            cls !is null,
+            "Demanded class not found!"
+            ~ "\nClass was: " ~ className
+        );
 
         return cls;
     }

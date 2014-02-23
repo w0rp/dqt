@@ -4,12 +4,17 @@ import std.exception;
 import std.stdio;
 import std.path;
 import std.file;
-import std.string;
 import std.array;
 import std.algorithm;
 import std.range;
 
 import smoke.smoke_container;
+import smoke.string_util;
+
+private alias Type = immutable(SmokeContainer.Type);
+private alias Class = immutable(SmokeContainer.Class);
+private alias Enum = immutable(SmokeContainer.Enum);
+private alias Method = immutable(SmokeContainer.Method);
 
 private string baseNameCPP(string qualifiedName) {
     auto parts = qualifiedName.split("::");
@@ -22,6 +27,10 @@ private string baseNameCPP(string qualifiedName) {
 }
 
 private string topNameD(string qualifiedName) {
+    if (qualifiedName.length == 0) {
+        return "";
+    }
+
     return qualifiedName.split(".")[0];
 }
 
@@ -54,6 +63,17 @@ public:
      * No methods will be generated which mention a blacklisted type.
      */
     bool delegate(Type type) blackListFunc;
+
+    /**
+     * This delegate will be called if set to blacklist classes.
+     *
+     * If this delegate returns true for a class, the class will no be
+     * generated, subclasses will not be generated, methods with the class
+     * mentioned in arguments will not be generated, etc.
+     *
+     * This should only be used when SMOKE just generates rubbish for a class.
+     */
+    bool delegate(Class cls) classBlackListFunc;
 
     /**
      * This delegate will be called if set to generate the names
@@ -102,10 +122,20 @@ private:
 
     void writeOpenClass(ref File file, Class cls, int indent) const {
         writeIndent(file, indent);
-        file.writef("class %s", baseNameCPP(cls.name));
+
+        if (cls.isAbstract) {
+            file.write("abstract ");
+        }
+
+        // Always write 'static', if it's redundant the compiler
+        // will just ignore it.
+        file.writef("static class %s", baseNameCPP(cls.name));
 
         if (cls.parentClassList.length > 0) {
-            file.writef(" : %s", cls.parentClassList[0].name);
+            file.writef(" : %s",
+                cls.parentClassList[0]
+                .name.replace("::", ".")
+            );
         }
 
         file.write(" {\n");
@@ -150,7 +180,7 @@ private:
             file.write(" const");
         }
 
-        if (method.isPureVirtual) {
+        if (method.isAbstract) {
             file.write(" = 0");
         }
 
@@ -159,7 +189,7 @@ private:
 
     void writeDType
     (ref File file, Type type, ReturnType returnType) const {
-        if (!returnType && type.isReference) {
+        if (!returnType && type.isReference && !type.isPrimitive) {
             // D has no reference types, so only write ref
             // for types when they are arguments.
             file.write("ref ");
@@ -179,11 +209,19 @@ private:
             file.write(")");
         }
 
-        file.write(repeat('*').take(type.pointerDimension));
+        auto pointerCount = type.pointerDimension;
+
+        if (pointerCount && !type.isPrimitive && !type.isEnum) {
+            // Use one less pointer for class types, as the classes
+            // will be a type of pointer themselves in D.
+            --pointerCount;
+        }
+
+        file.write(repeat('*').take(pointerCount));
     }
 
-    void writeOpenMethod
-    (ref File file, Method method, int indent) const {
+    void writeOpenMethod(ref File file, Method method, int indent,
+    AbstractImpl isAbstractImpl) const {
         // When debugging, print the method signature and everything
         // just like it was in C++.
         debug writeCPPMethodCommentLine(file, method, indent);
@@ -192,7 +230,7 @@ private:
 
         if (method.isDestructor) {
             // Just print this and be done with it for destructors.
-            file.writeln("~this() {");
+            file.write("~this() \n");
             return;
         }
 
@@ -202,21 +240,81 @@ private:
 
         if (method.isStatic) {
             file.write("static ");
-        } else if (method.isPureVirtual) {
+        } else if (!method.isVirtual
+        || method.isConstructor
+        || isAbstractImpl) {
+            //file.write("final ");
+        } else if (method.isAbstract) {
             file.write("abstract ");
-        } else if (!method.isVirtual && !method.isConstructor) {
-            file.write("final ");
         }
 
         if (!method.isStatic && method.isOverride) {
-            file.write("override ");
+            //file.write("override ");
         }
 
         if (method.isConstructor) {
             file.write("this(");
         } else{
             writeDType(file, method.returnType, ReturnType.yes);
-            file.writef(" %s(", method.name);
+
+            file.write(' ');
+
+            // TODO: Inject operator handling here.
+
+            file.write(method.name);
+
+            switch (method.name) {
+            case "abstract":
+            case "alias":
+            case "align":
+            case "asm":
+            case "assert":
+            case "cast":
+            case "cdouble":
+            case "cent":
+            case "cfloat":
+            case "creal":
+            case "dchar":
+            case "debug":
+            case "delegate":
+            case "foreach":
+            case "foreach_reverse":
+            case "idouble":
+            case "ifloat":
+            case "immutable":
+            case "import":
+            case "inout":
+            case "interface":
+            case "invariant":
+            case "ireal":
+            case "is":
+            case "lazy":
+            case "macro":
+            case "mixin":
+            case "module":
+            case "pure":
+            case "scope":
+            case "shared":
+            case "synchronized":
+            case "typeid":
+            case "typeof":
+            case "ubyte":
+            case "ucent":
+            case "uint":
+            case "ulong":
+            case "unittest":
+            case "ushort":
+            case "version":
+            case "volatile":
+            case "with":
+                // Write a trailing underscore for method names which are also
+                // D keywords.
+                file.write('_');
+            break;
+            default: break;
+            }
+
+            file.write('(');
         }
 
         foreach(i, type; method.argumentTypeList) {
@@ -230,26 +328,47 @@ private:
 
         file.write(')');
 
-        if (method.isConst) {
+        if (method.isConst && !method.isStatic) {
             file.write(" const");
-        }
-
-        if (method.isPureVirtual) {
-            file.write(";\n");
-        } else {
-            file.write(" {\n");
         }
     }
 
     void writeMethodBody
-    (ref File file, Method method, int indent) const {
-        if (method.isConstructor) {
+    (ref File file, Method method, size_t methodIndex, int indent) const {
+        // Write aliases so the rest of generation is easy.
+        writeIndent(file, indent);
+        file.write("alias cls = ");
+        writeMetaClassName(file, method.cls);
+        file.write(";\n");
+
+        writeIndent(file, indent);
+        file.write("alias methPtr = ");
+        writeMethodPtrName(file, methodIndex, method);
+        file.write(";\n\n");
+
+        if (method.isDestructor) {
+            // Destructors are very simple to bind.
+            writeIndent(file, indent);
+            file.write("auto stack = createSmokeStack();\n\n");
+
+            writeIndent(file, indent);
+
+            file.write("dqt_call_ClassFn("
+                ~ "cast(void*) cls.smokeClass.classFn, "
+                ~ "methPtr.method, "
+                ~ "cast(void*) _data, "
+                ~ "cast(void*) stack.ptr);");
+
+            return;
+        }
+
+        if (method.isConstructor && method.cls.parentClassList.length > 0) {
             // Write the super call at the start of constructors.
             writeSuperLine(file, method.cls, indent);
         }
 
         foreach(index, type; method.argumentTypeList) {
-            if (type.isPrimitive) {
+            if (type.isPrimitive || type.isEnum) {
                 writeIndent(file, indent);
                 file.writef("alias x%d_mapped = x%d;\n", index, index);
             } else {
@@ -266,59 +385,101 @@ private:
                 }
 
                 writeIndent(file, indent);
-                file.writef("alias x%d_mapped = x%d_wrapped._data;\n",
+                file.writef("auto x%d_mapped = x%d_wrapped._data;\n",
                     index, index);
             }
         }
 
         writeIndent(file, indent);
-        file.write("auto stackResult = cls.callMethod(methPtr, _data");
+        file.write("auto stack = createSmokeStack(");
 
         foreach(index, type; method.argumentTypeList) {
-            file.writef(", x%d_mapped", index);
+            if (index > 0) {
+                file.writef(", ");
+            }
+
+            file.writef("x%d_mapped", index);
         }
 
         file.write(");\n");
 
+        writeIndent(file, indent);
+        file.write("dqt_call_ClassFn("
+            ~ "cast(void*) cls.smokeClass.classFn, "
+            ~ "methPtr.method, ");
+
+        if (method.isStatic) {
+            // The static methods don't have the data pointer.
+            file.write("null");
+        } else {
+            file.write("cast(void*) _data");
+        }
+
+        file.write(", cast(void*) stack.ptr);\n");
+
         if (method.isConstructor) {
+            // Constructors have to set a binding with SMOKE so
+            // virtual methods can be called, etc.
+            writeIndent(file, indent);
+            file.write("dqt_bind_instance("
+                ~ "cls.smokeClass.classFn, "
+                ~ "stack[0].s_voidp);\n\n");
+
             // For constructors, don't return anything and just.
             // set the data pointer to the result.
             writeIndent(file, indent);
-            file.write("_data = stackResult.void_p;");
+            file.write("_data = stack[0].s_voidp;\n");
         } else if (method.returnType.typeString != "void") {
-            if (method.returnType.isEnum) {
+            writeIndent(file, indent);
+
+            if (method.returnType.isPrimitive) {
+                file.writef("return cast(typeof(return)) stack[0].%s;\n",
+                    method.returnType.stackItemEnumName,
+                );
+            } else if (method.returnType.isEnum) {
                 // Cast enum values to the right type.
-                writeIndent(file, indent);
-                file.write("auto finalValue = cast(");
-                writeDType(file, method.returnType, ReturnType.yes);
-                file.write(") stackResult.s_enum;\n");
+                file.write("return cast(typeof(return)) stack[0].s_enum;\n");
             } else {
                 string wrapper = outputWrapper(method.returnType);
 
                 if (wrapper.length > 0) {
-                    writeIndent(file, indent);
-                    file.writef("auto finalValue = %s(stackResult);",
+                    file.writef("return %s(stack[0]);\n",
                         wrapper);
+                } else if (method.returnType.cls !is null
+                && method.returnType.cls.isAbstract) {
+                    file.write(
+                        "return new "
+                        ~ method.returnType.cls.name.replace("::", ".")
+                        ~ ".Impl(Nothing.init, stack[0].s_voidp);\n"
+                    );
                 } else {
-                    writeIndent(file, indent);
-                    file.writef("alias finalValue = stackResult.%s;\n",
-                        method.returnType.stackItemEnumName,
+                    file.write(
+                        "return new typeof(return)"
+                        ~ "(Nothing.init, stack[0].s_voidp);\n"
                     );
                 }
             }
-
-            file.write("\n");
-
-            writeIndent(file, indent);
-            file.write("return finalValue;");
         }
-
-        file.write('\n');
     }
 
     void writeOpenEnum(ref File file, Enum enm, int indent) const {
         writeIndent(file, indent);
-        file.writef("enum %s {\n", baseNameCPP(enm.name));
+        file.writef("enum %s", baseNameCPP(enm.name));
+
+        bool asLong = false;
+
+        foreach(pair; enm.itemList) {
+            if (pair.value > int.max) {
+                asLong = true;
+                break;
+            }
+        }
+
+        if (asLong) {
+            file.write(" : long ");
+        }
+
+        file.write( "{\n");
     }
 
     void writeEnum(ref File file, Enum enm, int indent) const {
@@ -326,45 +487,81 @@ private:
 
         foreach(pair; enm.itemList) {
             writeIndent(file, indent + 1);
-            file.writef("%s = %d;\n", pair.name, pair.value);
+            file.writef("%s = %d,\n", pair.name, pair.value);
         }
 
         writeClose(file, indent);
     }
 
-    void writeMethodPtrName
-    (ref File file, size_t index, Method method) const {
-        // TODO: Write a more descriptive name here instead.
-        file.writef("ptr_%d", index);
+    void writeMetaClassName(ref File file, Class cls) const {
+        file.write("cls_");
+
+        foreach(character; cls.name) {
+            switch (character) {
+            case '0': .. case '9':
+            case 'a': .. case 'z':
+            case 'A': .. case 'Z':
+                file.write(character);
+            break;
+            default:
+                file.write('_');
+            break;
+            }
+        }
     }
 
-    void writeStaticClassConstructor
-    (ref File file, Class cls, int indent) const {
-        // Write the declarations first.
-        writeIndent(file, indent);
-        file.writeln("private static immutable(ClassData) cls;");
+    void writeMethodPtrName
+    (ref File file, size_t index, Method method) const {
+        file.write("ptr_");
+        writeMetaClassName(file, method.cls);
+        file.write("_");
 
+        foreach(character; method.name) {
+            switch (character) {
+            case '0': .. case '9':
+            case 'a': .. case 'z':
+            case 'A': .. case 'Z':
+                file.write(character);
+            break;
+            default:
+                file.write('_');
+            break;
+            }
+        }
+
+        file.write(index);
+    }
+
+    enum AbstractImpl { no, yes }
+
+    void writeStaticDeclarations(ref File file, Class cls) const {
         foreach(index, method; cls.methodList) {
-            if (isBlacklisted(method)
-            || method.isPureVirtual) {
+            if (isBlacklisted(method)) {
                 continue;
             }
 
-            writeIndent(file, indent);
-            file.write("private static immutable(Smoke.Method*) ");
+            file.write("package immutable(Smoke.Method*) ");
             writeMethodPtrName(file, index, method);
-            file.writeln(";");
+            file.write(";\n");
         }
 
-        file.writeln();
+        // Write the class loader.
+        file.write("package immutable(ClassData) ");
+        writeMetaClassName(file, cls);
+        file.write(";\n");
 
-        writeIndent(file, indent);
-        file.writeln("static shared this() {");
+        foreach(nestedClass; cls.nestedClassList) {
+            writeStaticDeclarations(file, nestedClass);
+        }
+    }
 
-        // Write out loading the class loader.
-        writeIndent(file, indent + 1);
+    void writeStaticAssignments(ref File file, Class cls) const {
+        writeIndent(file, 1);
+        // Write the class loader.
+        writeMetaClassName(file, cls);
+
         file.writef(
-            "cls = %s.demandClass(\"%s\");\n\n",
+            " = %s.demandClass(\"%s\");\n\n",
             _loaderName,
             cls.name
         );
@@ -374,50 +571,104 @@ private:
                 continue;
             }
 
-            writeIndent(file, indent + 1);
+            writeIndent(file, 1);
             writeMethodPtrName(file, index, method);
-            file.writef(" = cls.demandMethod(\"%s\"", method.name);
+            file.write(" = ");
+            writeMetaClassName(file, cls);
+            file.writef(".demandMethod(\"%s\"", method.name);
 
             foreach(type; method.argumentTypeList) {
                 file.writef(", \"%s\"", type.typeString);
             }
 
-            file.writeln(");");
+            file.write(");\n");
         }
 
-        writeIndent(file, indent);
-        file.writeln("}");
+        foreach(nestedClass; cls.nestedClassList) {
+            writeStaticAssignments(file, nestedClass);
+        }
     }
 
     void writeSuperLine(ref File file, Class cls, int indent) const {
+        writeIndent(file, indent);
+        file.write("super(Nothing.init);\n");
+    }
+
+    void writeSpecialConstructors
+    (ref File file, Class cls, int indent, AbstractImpl isAbstractImpl) const {
+        // Write a do nothing constructor for the benefit of skipping
+        // constructors in subclasses.
+        file.write('\n');
+        writeIndent(file, indent + 1);
+        file.write("package this(Nothing nothing) {\n");
+
         if (cls.parentClassList.length > 0) {
-            writeIndent(file, indent);
-            file.writeln("super(Nothing.init);");
+            writeSuperLine(file, cls, indent + 2);
         }
+
+        writeIndent(file, indent + 1);
+        file.write("}\n\n");
+
+        // Write a special hidden constructor the generator call use to return
+        // types returned back from C++.
+        // The type signature won't clash with another because it contains
+        // our special Nothing type.
+        writeIndent(file, indent + 1);
+        file.write("package this(Nothing nothing, void* data) {\n");
+
+        if (cls.parentClassList.length > 0) {
+            writeSuperLine(file, cls, indent + 2);
+        }
+
+        file.write("_data = data;");
+        file.write("}\n");
+    }
+
+    void writeAbstractClassImpl(ref File file, Class cls, int indent) const {
+        writeIndent(file, indent);
+
+        file.write("package final static class Impl : this {\n");
+
+        writeSpecialConstructors(file, cls, indent, AbstractImpl.yes);
+
+        void writeAbstractMethodFromClass(Class cls) {
+            foreach(index, method; cls.methodList) {
+                if (isBlacklisted(method) || !method.isAbstract) {
+                    continue;
+                }
+
+                writeOpenMethod(file, method, indent + 1, AbstractImpl.yes);
+                file.write(" {\n");
+                writeMethodBody(file, method, index, indent + 2);
+                writeClose(file, indent + 1);
+            }
+
+            if (cls.parentClassList.length > 0) {
+                // FIXME: Account for multiple inheritance and fixes here.
+                writeAbstractMethodFromClass(cls.parentClassList[0]);
+            }
+        }
+
+        writeAbstractMethodFromClass(cls);
+
+        writeIndent(file, indent);
+        file.write("}\n");
     }
 
     void writeClass(ref File file, Class cls, int indent) const {
-        writeOpenClass(file, cls, indent);
+        if (isBlacklisted(cls)) {
+            return;
+        }
 
-        writeStaticClassConstructor(file, cls, indent + 1);
+        writeOpenClass(file, cls, indent);
 
         if (cls.parentClassList.length == 0) {
             // Write the data pointer variable into root classes.
             writeIndent(file, indent + 1);
-            file.writeln("package void* _data;");
+            file.write("package void* _data;\n");
         }
 
-        // Write a do nothing constructor for the benefit of skipping
-        // constructors in subclasses.
-        file.writeln();
-
-        writeIndent(file, indent + 1);
-        file.writeln("package this(Nothing nothing) {");
-
-        writeSuperLine(file, cls, indent + 2);
-
-        writeIndent(file, indent + 1);
-        file.writeln("}");
+        writeSpecialConstructors(file, cls, indent, AbstractImpl.no);
 
         foreach(nestedClass; cls.nestedClassList) {
             writeClass(file, nestedClass, indent + 1);
@@ -432,28 +683,21 @@ private:
                 continue;
             }
 
-            writeOpenMethod(file, method, indent + 1);
+            writeOpenMethod(file, method, indent + 1, AbstractImpl.no);
 
             if (method.isPureVirtual) {
                 // Pure virtual methods have no body, etc.
+                file.write(";\n");
                 continue;
             }
 
-            // Write an alias so the rest of generation is easy.
-            writeIndent(file, indent + 2);
-            file.write("alias methPtr = ");
-            writeMethodPtrName(file, index, method);
-            file.write(";\n\n");
-
-            if (method.isDestructor) {
-                // Destructors are very simple to bind.
-                writeIndent(file, indent + 2);
-                file.write("cls.callMethod(methPtr, _data);\n");
-            } else {
-                writeMethodBody(file, method, indent + 2);
-            }
-
+            file.write(" {\n");
+            writeMethodBody(file, method, index, indent + 2);
             writeClose(file, indent + 1);
+        }
+
+        if (cls.isAbstract) {
+            writeAbstractClassImpl(file, cls, indent + 1);
         }
 
         writeClose(file, indent);
@@ -461,8 +705,6 @@ private:
 
     void writeImports(ref File file, Class cls) const {
         bool[string] nameSet;
-
-        // TODO: Inject global imports here with a function.
 
         void considerType(Type type) {
             if (type.isPrimitive) {
@@ -473,17 +715,16 @@ private:
                 return;
             }
 
-            string name = topNameD(basicDTypeFunc(type));
-
             // Add this one to the set.
+            string name = topNameD(basicDTypeFunc(type));
             nameSet[name] = true;
         }
 
-        foreach(method; cls.methodList) {
+        void searchForTypesInMethod(Method method) {
             if (isBlacklisted(method)) {
                 // If the method is not going to be generated, we shouldn't
                 // consider any types from it for imports at all.
-                continue;
+                return;
             }
 
             considerType(method.returnType);
@@ -493,23 +734,58 @@ private:
             }
         }
 
-        // Remove this type as a consideration.
-        nameSet.remove(cls.name);
+        void searchForTypesInClass(Class cls) {
+            foreach(method; cls.methodList) {
+                searchForTypesInMethod(method);
+            }
+
+            foreach(parentClass; cls.parentClassList) {
+                // Add this one to the set.
+                string name = topNameD(parentClass.name);
+                nameSet[name] = true;
+            }
+
+            foreach(nestedClass; cls.nestedClassList) {
+                searchForTypesInClass(nestedClass);
+            }
+
+            if (cls.isAbstract && cls.parentClassList.length > 0) {
+                // FIXME: Account for multiple inheritance here.
+                searchForTypesInClass(cls.parentClassList[0]);
+            }
+        }
+
+        void removeClassesDefinedHere(Class cls) {
+            nameSet.remove(topNameD(cls.name));
+
+            foreach(nestedClass; cls.nestedClassList) {
+                removeClassesDefinedHere(nestedClass);
+            }
+        }
+
+        searchForTypesInClass(cls);
+        removeClassesDefinedHere(cls);
 
         // This C types will be needed for generated code.
-        file.writeln("import core.stdc.config : c_long, c_ulong");
+        file.write("import core.stdc.config : c_long, c_ulong;\n");
         // Import smoke types, as they will be needed.
-        file.writeln("import smoke.smoke;");
-        file.writeln("import smoke.smoke_loader;");
+        file.write("import smoke.smoke;\n");
+        file.write("import smoke.smoke_util;\n");
+        file.write("import smoke.smoke_cwrapper;\n");
         // Write the module prefix import line.
-        file.writefln("import %s.prefix;", _moduleName);
+        file.writef("import %s.prefix;\n", _moduleName);
+        file.writef(
+            "import %s._static_%s;\n",
+            _moduleName,
+            cls.name.toLowerASCII
+        );
 
         foreach(name, _; nameSet) {
-            file.writefln("import %s.%s;", _moduleName, name.toLower);
+            file.writef("import %s.%s;\n", _moduleName, name.toLowerASCII);
         }
 
         if (nameSet.length >= 1) {
-            file.writeln();
+            file.write('\n');
         }
     }
 
@@ -529,8 +805,29 @@ private:
         return "";
     }
 
+    bool isBlacklisted(Class cls) const {
+        if (classBlackListFunc !is null && classBlackListFunc(cls)) {
+            return true;
+        }
+
+        // See if what we inherit was blacklisted. If something we inherit
+        // is blacklisted, this class will not be generated.
+        foreach(parent; cls.parentClassList) {
+            if (isBlacklisted(parent)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     bool isBlacklisted(Method method) const {
         if (isBlacklisted(method.returnType)) {
+            return true;
+        }
+
+        // FIXME: Handle operator overloads.
+        if (method.name.startsWith("operator")) {
             return true;
         }
 
@@ -544,6 +841,10 @@ private:
     }
 
     bool isBlacklisted(Type type) const {
+        if (type.cls !is null && isBlacklisted(type.cls)) {
+            return true;
+        }
+
         return blackListFunc !is null && blackListFunc(type);
     }
 
@@ -551,13 +852,8 @@ private:
         return importBlacklistFunc !is null && importBlacklistFunc(type);
     }
 
-    void writeModuleLine(ref File file) const {
-        file.writef(
-            "module %s.%s;\n\n",
-            _moduleName,
-            // Take the end of the module name from the filename
-            file.name.baseName.stripExtension
-        );
+    void writeModuleLine(ref File file, string baseName) const {
+        file.writef("module %s.%s;\n\n", _moduleName, baseName);
     }
 public:
     /**
@@ -616,14 +912,43 @@ public:
             mkdir(directory);
         }
 
+        string staticFilenameForTypename(string name) {
+            return buildPath(directory, "_static_" ~ name.toLowerASCII ~ ".d");
+        }
+
         string filenameForTypename(string name) {
-            return buildPath(directory, name ~ ".d");
+            return buildPath(directory, name.toLowerASCII ~ ".d");
         }
 
         foreach(cls; container.topLevelClassList) {
-            File file = File(filenameForTypename(cls.name.toLower), "w");
+            if (isBlacklisted(cls)) {
+                continue;
+            }
 
-            writeModuleLine(file);
+            File file = File(staticFilenameForTypename(cls.name), "w");
+            writeModuleLine(file, file.name.baseName.stripExtension);
+
+            file.write("import smoke.smoke;\n");
+            file.write("import smoke.smoke_loader;\n");
+            // Write the module prefix import line.
+            file.writef("import %s.prefix;\n\n", _moduleName);
+
+            writeStaticDeclarations(file, cls);
+
+            file.write("\nshared static this() {\n");
+
+            writeStaticAssignments(file, cls);
+
+            file.write('}');
+        }
+
+        foreach(cls; container.topLevelClassList) {
+            if (isBlacklisted(cls)) {
+                continue;
+            }
+
+            File file = File(filenameForTypename(cls.name), "w");
+            writeModuleLine(file, file.name.baseName.stripExtension);
 
             writeImports(file, cls);
 
@@ -631,9 +956,8 @@ public:
         }
 
         foreach(enm; container.topLevelEnumList) {
-            File file = File(filenameForTypename(enm.name.toLower), "w");
-
-            writeModuleLine(file);
+            File file = File(filenameForTypename(enm.name), "w");
+            writeModuleLine(file, file.name.baseName.stripExtension);
 
             writeEnum(file, enm, 0);
         }
