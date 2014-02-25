@@ -1,5 +1,5 @@
 import smoke.smoke;
-import smoke.smoke_cwrapper;
+import smoke.smokeqt;
 import smoke.smoke_container;
 import smoke.smoke_generator;
 import smoke.smoke_loader;
@@ -9,15 +9,12 @@ import std.string;
 import std.array;
 
 immutable(SmokeContainer) loadQtSmokeContainer() {
-    dqt_init_qtcore_Smoke();
-    scope(exit) dqt_delete_qtcore_Smoke();
-    dqt_init_qtgui_Smoke();
-    scope(exit) dqt_delete_qtgui_Smoke();
+    init_qtcore_Smoke();
+    scope(exit) delete_qtcore_Smoke();
+    init_qtgui_Smoke();
+    scope(exit) delete_qtgui_Smoke();
 
-    return SmokeContainer.create(
-        cast(Smoke*) dqt_fetch_qtcore_Smoke(),
-        cast(Smoke*) dqt_fetch_qtgui_Smoke()
-    );
+    return SmokeContainer.create(qtcore_Smoke, qtgui_Smoke);
 }
 
 void main() {

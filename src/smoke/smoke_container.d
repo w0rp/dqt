@@ -6,7 +6,6 @@ import std.exception;
 import std.functional;
 
 import smoke.smoke;
-import smoke.smoke_cwrapper;
 import smoke.smoke_util;
 import smoke.string_util : toSlice;
 

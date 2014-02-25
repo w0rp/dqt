@@ -15,13 +15,6 @@
 extern "C" {
 #endif
 
-SMOKEC_SPEC void dqt_init_qtcore_Smoke();
-SMOKEC_SPEC void dqt_delete_qtcore_Smoke();
-SMOKEC_SPEC void* dqt_fetch_qtcore_Smoke();
-SMOKEC_SPEC void dqt_init_qtgui_Smoke();
-SMOKEC_SPEC void dqt_delete_qtgui_Smoke();
-SMOKEC_SPEC void* dqt_fetch_qtgui_Smoke();
-
 SMOKEC_SPEC void dqt_bind_instance(void* classFn, void* object);
 
 SMOKEC_SPEC void* dqt_init_QString_utf16_reference(const short* data, int size);
@@ -33,4 +26,3 @@ SMOKEC_SPEC void dqt_delete_QString(void* qString);
 #endif
 
 #endif
-

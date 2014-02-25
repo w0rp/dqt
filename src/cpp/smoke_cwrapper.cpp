@@ -36,33 +36,6 @@ public:
     }
 };
 
-// The function definitions pretty much just
-// cast things around and call the right methods.
-
-SMOKEC_EXPORT void dqt_init_qtcore_Smoke() {
-    init_qtcore_Smoke();
-}
-
-SMOKEC_EXPORT void dqt_delete_qtcore_Smoke() {
-    delete_qtcore_Smoke();
-}
-
-SMOKEC_EXPORT void* dqt_fetch_qtcore_Smoke() {
-    return qtcore_Smoke;
-}
-
-SMOKEC_EXPORT void dqt_init_qtgui_Smoke() {
-    init_qtgui_Smoke();
-}
-
-SMOKEC_EXPORT void dqt_delete_qtgui_Smoke() {
-    delete_qtgui_Smoke();
-}
-
-SMOKEC_EXPORT void* dqt_fetch_qtgui_Smoke() {
-    return qtgui_Smoke;
-}
-
 SMOKEC_EXPORT void dqt_bind_instance(void* classFn, void* object) {
     Smoke::StackItem bindingStack[2];
 
@@ -88,4 +61,3 @@ SMOKEC_SPEC void* dqt_init_QString_utf8_copy(const char* data, int size) {
 SMOKEC_SPEC void dqt_delete_QString(void* qString) {
     delete static_cast<QString*>(qString);
 }
-
