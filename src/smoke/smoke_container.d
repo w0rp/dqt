@@ -10,17 +10,19 @@ import smoke.smoke_cwrapper;
 import smoke.smoke_util;
 import smoke.string_util : toSlice;
 
-@trusted
-private long loadEnumValue(Smoke* smoke, Smoke.Method* smokeMethod) pure {
+@trusted pure nothrow
+private long loadEnumValue(Smoke* smoke, Smoke.Method* smokeMethod) {
     Smoke.Class* smokeClass = smoke._classes + smokeMethod.classID;
 
     auto stack = createSmokeStack();
 
     // Cast this to pure. Sure the data is global, but screw it, make it pure.
-    alias extern(C) void function(void*, short, void*, void*) pure PureFunc;
+    alias extern(C) __gshared
+    void function(short, void*, Smoke.StackItem*)
+    pure nothrow
+    PureFunc;
 
-    (cast(PureFunc) &dqt_call_ClassFn)(
-        smokeClass.classFn, smokeMethod.method, null, stack.ptr);
+    (cast(PureFunc) smokeClass.classFn)(smokeMethod.method, null, stack.ptr);
 
     // Get the long value back from the return value of calling a SMOKE
     // function. This is the enum value.
@@ -588,8 +590,8 @@ public:
      * this container, so the this container is not dependant on the lifetime
      * of the Smoke structure.
      */
-    @trusted
-    void loadData(Smoke* smoke) pure {
+    @trusted pure
+    void loadData(Smoke* smoke) {
         for (int i = 0; i < smoke._numMethods; ++i) {
             Smoke.Method* smokeMethod = smoke._methods + i;
 
@@ -777,7 +779,7 @@ private:
             return false;
         }
 
-        pure @safe nothrow
+        @safe pure nothrow
         bool isReallyPrimitive(const(Type) type) {
             with(Smoke.TypeId) switch (type.typeID) {
             case t_enum:

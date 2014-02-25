@@ -10,15 +10,24 @@ public:
 
     // typedef void (*ClassFn)(Index method, void* obj, Stack args);
     /// A class method function
-    alias void function(Index method, void* object, StackItem* args) ClassFn;
+    alias extern(C) __gshared
+    void function(Index method, void* object, StackItem* args)
+    nothrow
+    ClassFn;
 
     //typedef void* (*CastFn)(void* obj, Index from, Index to);
     /// A cast function
-    alias void* function(void* obj, Index from, Index to) CastFn;
+    alias extern(C) __gshared
+    void* function(void* obj, Index from, Index to)
+    nothrow
+    CastFn;
 
     // typedef void (*EnumFn)(EnumOperation, Index, void*&, long&);
     /// An enum function
-    alias void function(EnumOperation, Index, void**, c_long*) EnumFn;
+    alias extern(C) __gshared
+    void function(EnumOperation, Index, void**, c_long*)
+    nothrow
+    EnumFn;
 
     /// A Smoke module.
     struct Smoke {

@@ -63,27 +63,6 @@ SMOKEC_EXPORT void* dqt_fetch_qtgui_Smoke() {
     return qtgui_Smoke;
 }
 
-SMOKEC_EXPORT void dqt_call_ClassFn(void* classFn, short method, void* obj,
-void* args) {
-    reinterpret_cast<Smoke::ClassFn>(classFn)(
-        method, obj, static_cast<Smoke::Stack>(args));
-}
-
-SMOKEC_EXPORT void* dqt_call_CastFn(void* castFn, void* obj, short from,
-short to) {
-    return reinterpret_cast<Smoke::CastFn>(castFn)(obj, from, to);
-}
-
-SMOKEC_EXPORT void dqt_call_EnumFn(void* enumFn, int enumOperation,
-short index, void** ptrRef, long* longRef) {
-    reinterpret_cast<Smoke::EnumFn>(enumFn)(
-        static_cast<Smoke::EnumOperation>(enumOperation),
-        index,
-        *ptrRef,
-        *longRef
-    );
-}
-
 SMOKEC_EXPORT void dqt_bind_instance(void* classFn, void* object) {
     Smoke::StackItem bindingStack[2];
 

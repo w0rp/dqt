@@ -363,11 +363,10 @@ private:
             file.write("auto stack = createSmokeStack();\n\n");
 
             writeIndent(file, indent);
-            file.write("dqt_call_ClassFn("
-                ~ "cast(void*) cls.smokeClass.classFn, "
+            file.write("cls.smokeClass.classFn("
                 ~ "methPtr.method, "
                 ~ "cast(void*) _data, "
-                ~ "cast(void*) stack.ptr);\n\n");
+                ~ "stack.ptr);\n\n");
 
             // Set null for reasons above.
             writeIndent(file, indent);
@@ -420,8 +419,7 @@ private:
         file.write(");\n");
 
         writeIndent(file, indent);
-        file.write("dqt_call_ClassFn("
-            ~ "cast(void*) cls.smokeClass.classFn, "
+        file.write("cls.smokeClass.classFn("
             ~ "methPtr.method, ");
 
         if (method.isStatic) {
@@ -431,7 +429,7 @@ private:
             file.write("cast(void*) _data");
         }
 
-        file.write(", cast(void*) stack.ptr);\n");
+        file.write(", stack.ptr);\n");
 
         if (method.isConstructor) {
             // Constructors have to set a binding with SMOKE so
