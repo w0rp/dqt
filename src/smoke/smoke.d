@@ -316,3 +316,18 @@ public:
      */
     CastFn _castFn;
 }
+
+/**
+ * A SmokeBinding interface can be implemented to receive method calls
+ * and delete signals from SMOKE.
+ *
+ * NOTE: callMethod actually takes a StackItem pointer for its 'args'
+ * argument, but a D fails to mangle pointers to union types. Cast it back.
+ */
+extern(C++) interface SmokeBinding {
+    void deleted(Smoke.Index classID, void* obj);
+    bool callMethod(Smoke.Index method, void* obj, void* args, bool isAbstract = false);
+    char* className(Smoke.Index classID);
+    // Padding to match the destructor in the vtable.
+    void __padding();
+};

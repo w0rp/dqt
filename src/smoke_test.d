@@ -1,11 +1,6 @@
 import dqt.qtcore;
 import dqt.qtgui;
 
-version(Windows) {
-    pragma(lib, "smokebase_implib.lib");
-    pragma(lib, "smoke_cwrapper_implib.lib");
-}
-
 int main() {
     import core.runtime;
 

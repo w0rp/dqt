@@ -347,8 +347,8 @@ private:
         file.write(";\n");
 
         writeIndent(file, indent);
-        file.write("alias methPtr = ");
-        writeMethodPtrName(file, methodIndex, method);
+        file.write("alias methIndex = ");
+        writeMethodIndexName(file, methodIndex, method);
         file.write(";\n\n");
 
         if (method.isDestructor) {
@@ -360,13 +360,7 @@ private:
             file.write("if (_data is null) return;\n\n");
 
             writeIndent(file, indent);
-            file.write("auto stack = createSmokeStack();\n\n");
-
-            writeIndent(file, indent);
-            file.write("cls.smokeClass.classFn("
-                ~ "methPtr.method, "
-                ~ "cast(void*) _data, "
-                ~ "stack.ptr);\n\n");
+            file.write("cls.callMethod(methIndex, _data);\n\n");
 
             // Set null for reasons above.
             writeIndent(file, indent);
@@ -406,70 +400,56 @@ private:
         }
 
         writeIndent(file, indent);
-        file.write("auto stack = createSmokeStack(");
+
+        if (method.isConstructor) {
+            file.write("_data = cls.callConstructor(methIndex");
+        } else {
+            file.write("auto retVal = cls.callMethod(methIndex, ");
+
+            if (method.isStatic) {
+                // The static methods don't have the data pointer.
+                file.write("null");
+            } else {
+                file.write("cast(void*) _data");
+            }
+        }
 
         foreach(index, type; method.argumentTypeList) {
-            if (index > 0) {
-                file.writef(", ");
-            }
-
-            file.writef("x%d_mapped", index);
+            file.writef(", x%d_mapped", index);
         }
 
         file.write(");\n");
 
         writeIndent(file, indent);
-        file.write("cls.smokeClass.classFn("
-            ~ "methPtr.method, ");
 
-        if (method.isStatic) {
-            // The static methods don't have the data pointer.
-            file.write("null");
-        } else {
-            file.write("cast(void*) _data");
-        }
-
-        file.write(", stack.ptr);\n");
-
-        if (method.isConstructor) {
-            // Constructors have to set a binding with SMOKE so
-            // virtual methods can be called, etc.
-            writeIndent(file, indent);
-            file.write("dqt_bind_instance("
-                ~ "cls.smokeClass.classFn, "
-                ~ "stack[0].s_voidp);\n\n");
-
-            // For constructors, don't return anything and just.
-            // set the data pointer to the result.
-            writeIndent(file, indent);
-            file.write("_data = stack[0].s_voidp;\n");
-        } else if (method.returnType.typeString != "void") {
+        if (!method.isConstructor
+        && method.returnType.typeString != "void") {
             writeIndent(file, indent);
 
             if (method.returnType.isPrimitive) {
-                file.writef("return cast(typeof(return)) stack[0].%s;\n",
+                file.writef("return cast(typeof(return)) retVal.%s;\n",
                     method.returnType.stackItemEnumName,
                 );
             } else if (method.returnType.isEnum) {
                 // Cast enum values to the right type.
-                file.write("return cast(typeof(return)) stack[0].s_enum;\n");
+                file.write("return cast(typeof(return)) retVal.s_enum;\n");
             } else {
                 string wrapper = outputWrapper(method.returnType);
 
                 if (wrapper.length > 0) {
-                    file.writef("return %s(stack[0]);\n",
+                    file.writef("return %s(retVal);\n",
                         wrapper);
                 } else if (method.returnType.cls !is null
                 && method.returnType.cls.isAbstract) {
                     file.write(
                         "return new "
                         ~ method.returnType.cls.name.replace("::", ".")
-                        ~ ".Impl(Nothing.init, stack[0].s_voidp);\n"
+                        ~ ".Impl(Nothing.init, retVal.s_voidp);\n"
                     );
                 } else {
                     file.write(
                         "return new typeof(return)"
-                        ~ "(Nothing.init, stack[0].s_voidp);\n"
+                        ~ "(Nothing.init, retVal.s_voidp);\n"
                     );
                 }
             }
@@ -524,9 +504,9 @@ private:
         }
     }
 
-    void writeMethodPtrName
+    void writeMethodIndexName
     (ref File file, size_t index, Method method) const {
-        file.write("ptr_");
+        file.write("meth_");
         writeMetaClassName(file, method.cls);
         file.write("_");
 
@@ -555,13 +535,13 @@ private:
                     continue;
                 }
 
-                file.write("package immutable(Smoke.Method*) ");
-                writeMethodPtrName(file, index, method);
+                file.write("package immutable(Smoke.Index) ");
+                writeMethodIndexName(file, index, method);
                 file.write(";\n");
             }
 
             // Write the class loader.
-            file.write("package immutable(ClassData) ");
+            file.write("package immutable(ClassLoader) ");
             writeMetaClassName(file, cls);
             file.write(";\n");
         }
@@ -589,10 +569,10 @@ private:
                 }
 
                 writeIndent(file, 1);
-                writeMethodPtrName(file, index, method);
+                writeMethodIndexName(file, index, method);
                 file.write(" = ");
                 writeMetaClassName(file, cls);
-                file.writef(".demandMethod(\"%s\"", method.name);
+                file.writef(".demandMethodIndex(\"%s\"", method.name);
 
                 foreach(type; method.argumentTypeList) {
                     file.writef(", \"%s\"", type.typeString);

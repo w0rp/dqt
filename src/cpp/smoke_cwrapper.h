@@ -15,8 +15,6 @@
 extern "C" {
 #endif
 
-SMOKEC_SPEC void dqt_bind_instance(void* classFn, void* object);
-
 SMOKEC_SPEC void* dqt_init_QString_utf16_reference(const short* data, int size);
 SMOKEC_SPEC void* dqt_init_QString_utf8_copy(const char* data, int size);
 SMOKEC_SPEC void dqt_delete_QString(void* qString);
@@ -26,3 +24,4 @@ SMOKEC_SPEC void dqt_delete_QString(void* qString);
 #endif
 
 #endif
+

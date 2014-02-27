@@ -7,20 +7,8 @@ import std.stdio;
 
 import smoke.smoke;
 import smoke.smoke_util;
+import smoke.string_util;
 import smoke.smoke_cwrapper;
-
-// These functions are very general, and belong elsewhere.
-pure @system nothrow
-private inout(char)[] toSlice(inout(char)* cString) {
-    import std.c.string;
-
-    return cString == null ? null : cString[0 .. strlen(cString)];
-}
-
-pure @safe nothrow
-private bool isEmptyString(inout(char*) cString) {
-    return cString == null || cString[0] == '\0';
-}
 
 pure @safe nothrow
 private ref V1 setDefault(K, V1, V2)(ref V1[K] map, K key, lazy V2 def)
@@ -36,14 +24,49 @@ if (is(V2 : V1)) {
     return map[key];
 }
 
+private extern(C++) class SmokeClassBinding : SmokeBinding {
+    ClassLoader _loader;
+
+    pure @safe nothrow
+    this (ClassLoader loader) in {
+        assert(loader !is null);
+    } body {
+        _loader = loader;
+    }
+
+    extern(C++) override void deleted(Smoke.Index classID, void* obj) {
+        _loader.objectDeleted(obj);
+    }
+
+    extern(C++) override bool callMethod(Smoke.Index methodIndex, void* obj,
+    void* args, bool isAbstract= false) body {
+        Smoke.Method* method = _loader._smoke._methods + methodIndex;
+
+        Smoke.StackItem[] argumentList = null;
+
+        if (args) {
+            argumentList = (cast(Smoke.StackItem*) args)[0 .. method.numArgs];
+        }
+
+        return _loader.methodCall(obj, method, argumentList, isAbstract);
+    }
+
+    extern(C++) override char* className(Smoke.Index classID) {
+        return null;
+    }
+
+    extern(C++) override void __padding() {}
+}
+
 /**
  * This class represents a wrapper around SMOKE data for loading
  * and calling function pointers quickly for a given class.
  */
-final class ClassData {
+final class ClassLoader {
 private:
     Smoke* _smoke;
     Smoke.Class* _cls;
+    SmokeClassBinding _binding;
     // We'll pack some methods in here, which may have many overloads.
     const(Smoke.Method*)[][string] _overloadedMethodMap;
 
@@ -55,6 +78,8 @@ private:
     } body {
         _smoke = smoke;
         _cls = cls;
+
+        _binding = new SmokeClassBinding(this);
     }
 
     pure @safe nothrow
@@ -68,34 +93,70 @@ private:
 
         return ptr !is null ? *ptr : null;
     }
-public:
-    @safe pure nothrow
-    inout(Smoke*) smoke() inout {
-        return _smoke;
+
+    void objectDeleted (void* object) {
+        // TODO: Handle object deleted signals here.
     }
 
-    @safe pure nothrow
-    inout(Smoke.Class*) smokeClass() inout {
-        return _cls;
+    bool methodCall(void* object, Smoke.Method* method,
+    ref const(Smoke.StackItem[]) argumentList, bool isAbstract) {
+        // TODO: Handle method calls here.
+
+        return false;
+    }
+public:
+    /**
+     * Call a constructor for a class with a method index and some
+     * arguments.
+     *
+     * Returns: The pointer to the object which was constructed.
+     */
+    @trusted
+    void* callConstructor(A...)(Smoke.Index methodIndex, A a) const {
+        static if (A.length == 0) {
+            // If we have a constructor of zero arguments, create a stack
+            // with enough space for passing the binding.
+            Smoke.StackItem[2] stack;
+        } else {
+            auto stack = createSmokeStack(a);
+        }
+
+        _cls.classFn(methodIndex, null, stack.ptr);
+
+        // If calling a constructor, re-use the stack to pass the binding.
+        stack[1].s_voidp = cast(void*) _binding;
+        _cls.classFn(0, stack[0].s_voidp, stack.ptr);
+
+        return stack[0].s_voidp;
+    }
+
+    /**
+     * Call a method for a class with a method index and some arguments.
+     *
+     * Returns: A union type representing the return value.
+     */
+    @trusted
+    Smoke.StackItem callMethod(A...)
+    (Smoke.Index methodIndex, void* object, A a) const {
+        auto stack = createSmokeStack(a);
+
+        _cls.classFn(methodIndex, object, stack.ptr);
+
+        return stack[0];
     }
 
     /**
      * Search for a method with a given name and list of argument types.
      * The types must be specified exactly as they are in C++.
      */
-    @trusted pure
-    immutable(Smoke.Method*) findMethod
+    @trusted pure nothrow
+    immutable(Smoke.Index) findMethodIndex
     (string methodName, string[] argumentTypes ...) const {
         import std.c.string;
 
         methLoop: foreach(meth; methodMatches(methodName)) {
             if (meth.numArgs != argumentTypes.length) {
                 continue;
-            }
-
-            debug {
-                writeln("Possible method match...");
-                writeln(methodName);
             }
 
             // Slice the argument index list out.
@@ -106,22 +167,17 @@ public:
                 // Skip to the type pointer.
                 auto type = _smoke._types + argIndex;
 
-                debug {
-                    writefln("Type name: %s", type.name.toSlice);
-                }
-
-                // TODO: Include const and & here?
-
+                // FIXME: This is probably buggy, use a safer comparison
+                // function.
                 if (strcmp(argumentTypes[i].ptr, type.name)) {
                     continue methLoop;
                 }
             }
 
-            // FIXME: This cast shouldn't be needed.
-            return cast(immutable) meth;
+            return meth.method;
         }
 
-        return null;
+        return 0;
     }
 
     /**
@@ -131,25 +187,25 @@ public:
      * If the method cannot be found, throw an exception.
      */
     @trusted pure
-    immutable(Smoke.Method*) demandMethod
+    immutable(Smoke.Index) demandMethodIndex
     (string methodName, string[] argumentTypes ...) const {
         import std.exception;
 
-        auto method = findMethod(methodName, argumentTypes);
+        auto index = findMethodIndex(methodName, argumentTypes);
 
         enforce(
-            method !is null,
+            index != 0,
             "Demanded method not found!"
             ~ "\nMethod was: " ~ methodName
         );
 
-        return method;
+        return index;
     }
 }
 
 struct SmokeLoader {
 private:
-    ClassData[string] _classMap;
+    ClassLoader[string] _classMap;
 
     @trusted pure
     void loadClassMethodData(Smoke* smoke) {
@@ -178,9 +234,9 @@ private:
             }
 
             // get/create class data for the class for this method.
-            ClassData classData = _classMap.setDefault(className,
+            ClassLoader classData = _classMap.setDefault(className,
                 // Skip to the class pointer directly.
-                new ClassData(smoke, smoke._classes + meth.classID)
+                new ClassLoader(smoke, smoke._classes + meth.classID)
             );
 
             string methodName = methNameList[meth.name].toSlice.idup;
@@ -205,12 +261,12 @@ public:
     @disable this(this);
 
     pure @trusted
-    immutable(ClassData) findClass(string className) const {
+    immutable(ClassLoader) findClass(string className) const {
         return cast(immutable) _classMap.get(className, null);
     }
 
     pure @trusted
-    immutable(ClassData) demandClass(string className) const {
+    immutable(ClassLoader) demandClass(string className) const {
         import std.exception;
 
         auto cls = findClass(className);
