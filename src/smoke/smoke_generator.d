@@ -16,6 +16,163 @@ private alias Class = immutable(SmokeContainer.Class);
 private alias Enum = immutable(SmokeContainer.Enum);
 private alias Method = immutable(SmokeContainer.Method);
 
+
+/**
+ * Stored in a maximum of 128-bits of space,
+ * this object represents an array of bits up to a maximum of 64 bits.
+ *
+ * Index 0 represents the least significant bit (2 ^^ 0),
+ * the last valid index being the most significant bit.
+ */
+private struct BitArray64 {
+private:
+    ulong _data;
+    size_t _length;
+public:
+    @safe pure nothrow
+    this(ulong data, size_t length) {
+        _data = data;
+        _length = length;
+    }
+
+    @safe pure nothrow
+    @property
+    size_t length() const {
+        return _length;
+    }
+
+    @safe pure nothrow
+    bool opIndex(size_t index) const
+    in {
+        assert(index < _length);
+    } body {
+        return cast(bool)(_data & (1 << index));
+    }
+
+    @safe pure nothrow
+    void opIndexAssign(bool value, size_t index)
+    in {
+        assert(index < _length);
+    } body {
+        if (value) {
+            // Set the bit to 1.
+            _data |= 1 << index;
+        } else {
+            // Set the bit to 0.
+            _data &= ~(1 << index);
+        }
+    }
+
+    int opApply(int delegate(ref size_t, ref bool) dg) {
+        int result = 0;
+
+        for (size_t index = 0; index < _length; ++index) {
+            bool value = this[index];
+            bool originalValue = value;
+
+            result = dg(index, value);
+
+            if (value != originalValue) {
+                this[index] = value;
+            }
+
+            if (result) {
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    int opApplyReverse(int delegate(ref size_t, ref bool) dg) {
+        int result = 0;
+
+        size_t index = _length - 1;
+
+        while (true) {
+            bool value = this[index];
+            bool originalValue = value;
+
+            result = dg(index, value);
+
+            if (value != originalValue) {
+                this[index] = value;
+            }
+
+            if (!index || result) {
+                break;
+            }
+
+            --index;
+        }
+
+        return result;
+    }
+
+    @safe pure nothrow
+    string toString() {
+        string str = "[";
+
+        for (size_t index = 0; index < _length; ++index) {
+            bool val = this[index];
+
+            if (index > 0) {
+                str ~= ", ";
+            }
+
+            if (val) {
+                str ~= '1';
+            } else {
+                str ~= '0';
+            }
+        }
+
+        str ~= ']';
+
+        return str;
+    }
+}
+
+/**
+ * This object represents a range which outputs the Cartesian product
+ * of the binary numbers (0, 1) with itself a given n-many times.
+ *
+ * This can be used to generated all possible sequences of a collection
+ * of switches being on or off. Sequences will be generated from the smallest
+ * binary number to the largest. (All 0s first, all 1s last)
+ */
+private struct BinaryCartesianProduct {
+private:
+    ulong _number;
+    ubyte _power;
+public:
+    this(ubyte power) in {
+        assert(power < 64);
+    } body {
+        _power = power;
+    }
+
+    @safe pure nothrow
+    @property
+    bool empty() {
+        return _number >= 2 ^^ _power;
+    }
+
+    @safe pure
+    BitArray64 front() {
+        enforce(!empty);
+
+        return BitArray64(_number, _power);
+    }
+
+    @safe pure
+    void popFront() {
+        enforce(!empty);
+
+        ++_number;
+    }
+}
+
 private string baseNameCPP(string qualifiedName) {
     auto parts = qualifiedName.split("::");
 
@@ -103,7 +260,7 @@ public:
 
     bool delegate(Type type) importBlacklistFunc;
 private:
-    enum ReturnType : bool { no, yes }
+    enum RemoveRef : bool { no, yes }
 
     void writeIndent(ref File file, int size) const {
         if (size == 0) {
@@ -188,14 +345,20 @@ private:
     }
 
     void writeDType
-    (ref File file, Type type, ReturnType returnType) const {
-        if (!returnType && type.isReference) {
+    (ref File file, Type type, RemoveRef removeRef) const {
+        if (!removeRef
+        && type.isReference
+        // Don't take primitive types by const ref, we just don't need to
+        // and it makes things more complicated.
+        && !(type.isConst && type.isPrimitive)) {
             // D has no reference types, so only write ref
             // for types when they are arguments.
             file.write("ref ");
         }
 
-        if (type.isConst) {
+        // We won't write const() for primitive types, to make things
+        // simpler.
+        if (type.isConst && !type.isPrimitive) {
             file.write("const(");
         }
 
@@ -205,7 +368,7 @@ private:
             file.write(basicDTypeFunc(type));
         }
 
-        if (type.isConst) {
+        if (type.isConst && !type.isPrimitive) {
             file.write(")");
         }
 
@@ -220,20 +383,69 @@ private:
         file.write(repeat('*').take(pointerCount));
     }
 
-    void writeOpenMethod(ref File file, Method method, int indent,
-    AbstractImpl isAbstractImpl) const {
-        // When debugging, print the method signature and everything
-        // just like it was in C++.
-        debug writeCPPMethodCommentLine(file, method, indent);
-
-        writeIndent(file, indent);
-
-        if (method.isDestructor) {
-            // Just print this and be done with it for destructors.
-            file.write("~this() \n");
+    void writeMethodName(ref File file, Method method) const {
+        if (method.isConstructor) {
+            file.write("this");
             return;
         }
 
+        // TODO: Inject operator handling here.
+        file.write(method.name);
+
+        switch (method.name) {
+        case "abstract":
+        case "alias":
+        case "align":
+        case "asm":
+        case "assert":
+        case "cast":
+        case "cdouble":
+        case "cent":
+        case "cfloat":
+        case "creal":
+        case "dchar":
+        case "debug":
+        case "delegate":
+        case "foreach":
+        case "foreach_reverse":
+        case "idouble":
+        case "ifloat":
+        case "immutable":
+        case "import":
+        case "inout":
+        case "interface":
+        case "invariant":
+        case "ireal":
+        case "is":
+        case "lazy":
+        case "macro":
+        case "mixin":
+        case "module":
+        case "pure":
+        case "scope":
+        case "shared":
+        case "synchronized":
+        case "typeid":
+        case "typeof":
+        case "ubyte":
+        case "ucent":
+        case "uint":
+        case "ulong":
+        case "unittest":
+        case "ushort":
+        case "version":
+        case "volatile":
+        case "with":
+            // Write a trailing underscore for method names which are also
+            // D keywords.
+            file.write('_');
+        break;
+        default: break;
+        }
+    }
+
+    void writeOpenMethodPrefix(ref File file, Method method,
+    AbstractImpl isAbstractImpl) const {
         if (method.isProtected) {
             file.write("protected ");
         }
@@ -252,85 +464,50 @@ private:
             //file.write("override ");
         }
 
-        if (method.isConstructor) {
-            file.write("this(");
-        } else{
-            writeDType(file, method.returnType, ReturnType.yes);
-
+        if (!method.isConstructor) {
+            writeDType(file, method.returnType, RemoveRef.yes);
             file.write(' ');
-
-            // TODO: Inject operator handling here.
-
-            file.write(method.name);
-
-            switch (method.name) {
-            case "abstract":
-            case "alias":
-            case "align":
-            case "asm":
-            case "assert":
-            case "cast":
-            case "cdouble":
-            case "cent":
-            case "cfloat":
-            case "creal":
-            case "dchar":
-            case "debug":
-            case "delegate":
-            case "foreach":
-            case "foreach_reverse":
-            case "idouble":
-            case "ifloat":
-            case "immutable":
-            case "import":
-            case "inout":
-            case "interface":
-            case "invariant":
-            case "ireal":
-            case "is":
-            case "lazy":
-            case "macro":
-            case "mixin":
-            case "module":
-            case "pure":
-            case "scope":
-            case "shared":
-            case "synchronized":
-            case "typeid":
-            case "typeof":
-            case "ubyte":
-            case "ucent":
-            case "uint":
-            case "ulong":
-            case "unittest":
-            case "ushort":
-            case "version":
-            case "volatile":
-            case "with":
-                // Write a trailing underscore for method names which are also
-                // D keywords.
-                file.write('_');
-            break;
-            default: break;
-            }
-
-            file.write('(');
         }
+
+        writeMethodName(file, method);
+
+        file.write('(');
+    }
+
+    void writeOpenMethodSuffix(ref File file, Method method) const {
+        file.write(')');
+
+        if (method.isConst && !method.isStatic) {
+            file.write(" const");
+        }
+    }
+
+    void writeOpenMethod(ref File file, Method method, int indent,
+    AbstractImpl isAbstractImpl) const {
+        // When debugging, print the method signature and everything
+        // just like it was in C++.
+        debug writeCPPMethodCommentLine(file, method, indent);
+
+        writeIndent(file, indent);
+
+        if (method.isDestructor) {
+            // Just print this and be done with it for destructors.
+            file.write("~this() \n");
+            return;
+        }
+
+        writeOpenMethodPrefix(file, method, isAbstractImpl);
 
         foreach(i, type; method.argumentTypeList) {
             if (i > 0) {
                 file.write(", ");
             }
 
-            writeDType(file, type, ReturnType.no);
+            writeDType(file, type, RemoveRef.no);
             file.writef(" x%d", i);
         }
 
-        file.write(')');
-
-        if (method.isConst && !method.isStatic) {
-            file.write(" const");
-        }
+        writeOpenMethodSuffix(file, method);
     }
 
     void writeMethodBody
@@ -453,6 +630,82 @@ private:
                     );
                 }
             }
+        }
+    }
+
+    /**
+     * Write a series of overloads removing 'ref' from 'ref const(T)' methods
+     * in every possible combination to make taking r-values just work.
+     */
+    void writeConstRefOverloads
+    (ref File file, Method method, int indent) const {
+        size_t[size_t] indexMap;
+
+        foreach(index, type; method.argumentTypeList) {
+            if (type.isConst
+            && !type.isPrimitive
+            && type.isReference) {
+                size_t bitIndex = indexMap.length;
+                indexMap[index] = bitIndex;
+            }
+        }
+
+        if (indexMap.length == 0) {
+            return;
+        }
+
+        assert (indexMap.length <= 64);
+
+        ubyte product_size = cast(ubyte) indexMap.length;
+
+        foreach(array; BinaryCartesianProduct(product_size).dropOne()) {
+            // First, write a new method overload.
+            file.write('\n');
+            writeIndent(file, indent);
+
+            writeOpenMethodPrefix(file, method, AbstractImpl.yes);
+
+            foreach(index, type; method.argumentTypeList) {
+                if (index > 0) {
+                    file.write(", ");
+                }
+
+                auto removeRef = RemoveRef.no;
+
+                if (auto bitIndexPtr = index in indexMap) {
+                    removeRef = cast(RemoveRef) array[*bitIndexPtr];
+                }
+
+                writeDType(file, type, removeRef);
+                file.writef(" x%d", index);
+            }
+
+            writeOpenMethodSuffix(file, method);
+
+            // Now write the method body as a delegate to the original method.
+            file.write("{\n");
+            writeIndent(file, indent + 1);
+
+            if (!method.isConstructor
+            && method.returnType.typeString != "void") {
+                // We must return the same argument.
+                file.write("return ");
+            }
+
+            writeMethodName(file, method);
+            file.write('(');
+
+            foreach(index, type; method.argumentTypeList) {
+                if (index > 0) {
+                    file.write(", ");
+                }
+
+                file.writef("x%d", index);
+            }
+
+            file.write(");\n");
+            writeIndent(file, indent);
+            file.write("}\n");
         }
     }
 
@@ -639,6 +892,8 @@ private:
                 file.write(" {\n");
                 writeMethodBody(file, method, index, indent + 2);
                 writeClose(file, indent + 1);
+
+                writeConstRefOverloads(file, method, indent + 1);
             }
 
             if (cls.parentClassList.length > 0) {
@@ -683,8 +938,8 @@ private:
 
             writeOpenMethod(file, method, indent + 1, AbstractImpl.no);
 
-            if (method.isPureVirtual) {
-                // Pure virtual methods have no body, etc.
+            if (method.isAbstract) {
+                // Abstract methods have no body, etc.
                 file.write(";\n");
                 continue;
             }
@@ -692,6 +947,8 @@ private:
             file.write(" {\n");
             writeMethodBody(file, method, index, indent + 2);
             writeClose(file, indent + 1);
+
+            writeConstRefOverloads(file, method, indent + 1);
         }
 
         if (cls.isAbstract) {

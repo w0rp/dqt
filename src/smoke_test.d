@@ -8,9 +8,7 @@ int main() {
 
     auto app = new QApplication(cArgs.argc, cArgs.argv);
 
-    auto x = "Hello World";
-
-    auto label = new QLabel(x);
+    auto label = new QLabel("Hello World");
 
     label.show();
 
