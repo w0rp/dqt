@@ -80,7 +80,10 @@ public:
 
         // Call a special D runtime function for nulling our reference
         // to the object when the object is destroyed.
-        (cast(PureEventFunc) &rt_attachDisposeEvent)(object, &disposed);
+        (cast(PureEventFunc) &rt_attachDisposeEvent)(
+            cast(Object) object,
+            &disposed
+        );
     }
 
     @trusted pure nothrow
@@ -110,7 +113,7 @@ public:
      * Returns: True the other object is a weak reference to the same object.
      */
     @safe pure nothrow
-    override bool opEquals(Object other) {
+    override bool opEquals(Object other) const {
         if (other is this) {
             return true;
         }
@@ -120,6 +123,12 @@ public:
         }
 
         return false;
+    }
+
+    /// ditto
+    @trusted pure nothrow
+    final bool opEquals(const(Object) other) const {
+        return this.opEquals(cast(Object) other);
     }
 }
 
@@ -182,4 +191,15 @@ unittest {
 
     assert(y !is z);
     assert(y == z);
+}
+
+// Test tail-const weak references.
+unittest {
+    class SomeType { }
+
+    const x = new SomeType();
+    const y = new SomeType();
+
+    auto z = weak(x);
+    z = weak(y);
 }

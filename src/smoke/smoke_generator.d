@@ -293,6 +293,9 @@ private:
                 cls.parentClassList[0]
                 .name.replace("::", ".")
             );
+        } else {
+            // If this is a root generated class, insert the interface here.
+            file.writef(" : GeneratedSmokeWrapper");
         }
 
         file.write(" {\n");
@@ -528,6 +531,8 @@ private:
         writeMethodIndexName(file, methodIndex, method);
         file.write(";\n\n");
 
+        // TODO: We could write the destructor only in the top-most
+        // class instead and avoid the null checks.
         if (method.isDestructor) {
             // Destructors are very simple to bind.
 
@@ -536,8 +541,16 @@ private:
             writeIndent(file, indent);
             file.write("if (_data is null) return;\n\n");
 
+            // Call the C++ destructor if this class is marked as being
+            // responsible for doing so.
             writeIndent(file, indent);
-            file.write("cls.callMethod(methIndex, _data);\n\n");
+            file.write("if ((_flags & SmokeObjectFlags.unmanaged) == 0) "
+                ~ "cls.callMethod(methIndex, _data);\n\n");
+
+            // Remove the mappings from the C++ class pointer back to this
+            // object.
+            writeIndent(file, indent);
+            file.write("deleteSmokeMapping(_data);\n\n");
 
             // Set null for reasons above.
             writeIndent(file, indent);
@@ -580,6 +593,7 @@ private:
 
         if (method.isConstructor) {
             file.write("_data = cls.callConstructor(methIndex");
+
         } else {
             file.write("auto retVal = cls.callMethod(methIndex, ");
 
@@ -597,36 +611,71 @@ private:
 
         file.write(");\n");
 
-        writeIndent(file, indent);
-
-        if (!method.isConstructor
-        && method.returnType.typeString != "void") {
+        if (method.isConstructor) {
+            // In constructors, we need to store a reference to the pointer
+            // to the object back to this object.
             writeIndent(file, indent);
+            file.write("storeSmokeMapping(_data, this);\n");
+        }
 
-            if (method.returnType.isPrimitive) {
-                file.writef("return cast(typeof(return)) retVal.%s;\n",
-                    method.returnType.stackItemEnumName,
-                );
-            } else if (method.returnType.isEnum) {
-                // Cast enum values to the right type.
-                file.write("return cast(typeof(return)) retVal.s_enum;\n");
+        if (method.isConstructor
+        || method.returnType.typeString == "void") {
+            // We're done here, we don't have to deal with return values.
+            return;
+        }
+
+        if (method.returnType.isPrimitive) {
+            writeIndent(file, indent);
+            file.writef("return cast(typeof(return)) retVal.%s;\n",
+                method.returnType.stackItemEnumName,
+            );
+        } else if (method.returnType.isEnum) {
+            // Cast enum values to the right type.
+            writeIndent(file, indent);
+            file.write("return cast(typeof(return)) retVal.s_enum;\n");
+        } else {
+            string wrapper = outputWrapper(method.returnType);
+
+            if (wrapper.length > 0) {
+                writeIndent(file, indent);
+                file.writef("return %s(retVal);\n",
+                    wrapper);
             } else {
-                string wrapper = outputWrapper(method.returnType);
+                // If the pointer is null on the C++ side, return null from
+                // D and stop here.
+                writeIndent(file, indent);
+                file.write("if (retVal.s_voidp is null) return null;\n");
 
-                if (wrapper.length > 0) {
-                    file.writef("return %s(retVal);\n",
-                        wrapper);
-                } else if (method.returnType.cls !is null
+                // Try to get a pre-existing wrapper first.
+                // Write a cast here to check if we have an object of the
+                // right type to begin with.
+                //
+                // This will make our internal functions raise assertion
+                // errors if something went seriously wrong.
+                writeIndent(file, indent);
+                file.write("auto object = cast(typeof(return)) "
+                    ~ "loadSmokeMapping(retVal.s_voidp);\n\n");
+
+                writeIndent(file, indent);
+                file.write("if (object !is null) return object;\n");
+
+                // If getting the wrapper fails, we'll create a fresh object.
+                writeIndent(file, indent + 1);
+                file.write("auto flags = SmokeObjectFlags.unmanaged;\n\n");
+
+                if (method.returnType.cls !is null
                 && method.returnType.cls.isAbstract) {
+                    writeIndent(file, indent + 1);
                     file.write(
-                        "return new "
+                        "return cast(typeof(return)) new "
                         ~ method.returnType.cls.name.replace("::", ".")
-                        ~ ".Impl(Nothing.init, retVal.s_voidp);\n"
+                        ~ ".Impl(flags, retVal.s_voidp);\n"
                     );
                 } else {
+                    writeIndent(file, indent + 1);
                     file.write(
                         "return new typeof(return)"
-                        ~ "(Nothing.init, retVal.s_voidp);\n"
+                        ~ "(flags, retVal.s_voidp);\n"
                     );
                 }
             }
@@ -845,33 +894,51 @@ private:
         file.write("super(Nothing.init);\n");
     }
 
-    void writeSpecialConstructors
+    void writeSpecialMethods
     (ref File file, Class cls, int indent, AbstractImpl isAbstractImpl) const {
         // Write a do nothing constructor for the benefit of skipping
         // constructors in subclasses.
         file.write('\n');
-        writeIndent(file, indent + 1);
+        writeIndent(file, indent);
         file.write("package this(Nothing nothing) {\n");
 
         if (cls.parentClassList.length > 0) {
-            writeSuperLine(file, cls, indent + 2);
+            writeSuperLine(file, cls, indent + 1);
         }
 
-        writeIndent(file, indent + 1);
+        writeIndent(file, indent);
         file.write("}\n\n");
 
         // Write a special hidden constructor the generator call use to return
         // types returned back from C++.
-        // The type signature won't clash with another because it contains
-        // our special Nothing type.
-        writeIndent(file, indent + 1);
-        file.write("package this(Nothing nothing, void* data) {\n");
+        //
+        // This method accepts flags for controlling the object's behaviour.
+        writeIndent(file, indent);
+        file.write("package this(SmokeObjectFlags flags, void* data) {\n");
 
         if (cls.parentClassList.length > 0) {
-            writeSuperLine(file, cls, indent + 2);
+            writeSuperLine(file, cls, indent + 1);
         }
 
-        file.write("_data = data;");
+        file.write("_flags = flags;\n");
+        file.write("_data = data;\n");
+
+        // Keep a weak reference to this new wrapper object we are
+        // creating, so we don't create multiple wrappers to the same
+        // object.
+        writeIndent(file, indent + 1);
+        file.write("storeSmokeMapping(_data, this);\n");
+
+        writeIndent(file, indent);
+        file.write("}\n");
+
+        writeIndent(file, indent);
+        file.write("@system void disableGC() {\n");
+
+        writeIndent(file, indent + 1);
+        file.write("storeStrongSmokeMapping(_data, this); \n");
+
+        writeIndent(file, indent);
         file.write("}\n");
     }
 
@@ -880,7 +947,7 @@ private:
 
         file.write("package final static class Impl : this {\n");
 
-        writeSpecialConstructors(file, cls, indent, AbstractImpl.yes);
+        writeSpecialMethods(file, cls, indent + 1, AbstractImpl.yes);
 
         void writeAbstractMethodFromClass(Class cls) {
             foreach(index, method; cls.methodList) {
@@ -919,9 +986,13 @@ private:
             // Write the data pointer variable into root classes.
             writeIndent(file, indent + 1);
             file.write("package void* _data;\n");
+
+            // Write the flags too.
+            writeIndent(file, indent + 1);
+            file.write("package SmokeObjectFlags _flags;\n");
         }
 
-        writeSpecialConstructors(file, cls, indent, AbstractImpl.no);
+        writeSpecialMethods(file, cls, indent + 1, AbstractImpl.no);
 
         foreach(nestedClass; cls.nestedClassList) {
             writeClass(file, nestedClass, indent + 1);

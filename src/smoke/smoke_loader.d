@@ -9,6 +9,7 @@ import smoke.smoke;
 import smoke.smoke_util;
 import smoke.string_util;
 import smoke.smoke_cwrapper;
+import smoke.weak_reference;
 
 pure @safe nothrow
 private ref V1 setDefault(K, V1, V2)(ref V1[K] map, K key, lazy V2 def)
@@ -94,8 +95,17 @@ private:
         return ptr !is null ? *ptr : null;
     }
 
-    void objectDeleted (void* object) {
-        // TODO: Handle object deleted signals here.
+    void objectDeleted(void* ptr) {
+        Object object = cast(Object) loadSmokeMapping(ptr);
+
+        if (object) {
+            // Destroy the object early on our side if we have it.
+            destroy(object);
+        }
+
+        // Remove the mapping, this may have already been done by the
+        // class destructor before.
+        deleteSmokeMapping(ptr);
     }
 
     bool methodCall(void* object, Smoke.Method* method,
@@ -203,6 +213,78 @@ public:
     }
 }
 
+private WeakReference!(const(Object))[const(void*)] _weakMap;
+private const(Object)[const(void*)] _strongMap;
+
+/**
+ * Given a pointer to some C++ class and a D class,
+ * store a mapping from the C++ class to a weak reference to the D class.
+ *
+ * This will make it possible to find the currently living D class wrapping
+ * a C++ class so identity (x is y) can work, etc.
+ *
+ * This reference must be removed later by some means, say in a D class
+ * destructor.
+ */
+@system nothrow
+void storeSmokeMapping(const(void*) ptr, const(Object) object)
+in {
+    assert(ptr !is null, "null C++ class reference");
+    assert(object !is null, "null D class reference");
+    assert(ptr !in _weakMap, "Added pointer mapping twice!");
+} body {
+    _weakMap[ptr] = weak(object);
+}
+
+/**
+ * Given a pointer to some C++ class, return the previously stored
+ * reference to a D class wrapping the C++ class. If one is not stored,
+ * return null.
+ */
+@system nothrow
+const(Object) loadSmokeMapping(const(void*) ptr)
+in {
+    assert(ptr !is null, "null C++ class reference");
+} body {
+    if (auto weak = ptr in _weakMap) {
+        return weak.get;
+    }
+
+    if (auto objPtr = ptr in _strongMap) {
+        return *objPtr;
+    }
+
+    return null;
+}
+
+/**
+ * Given a pointer to some C++ class, remove any weak or strong references
+ * to the D class wrapping the C++ class.
+ */
+@system nothrow
+void deleteSmokeMapping(const(void*) ptr)
+in {
+    assert(ptr !is null, "null C++ class reference");
+} body {
+    _weakMap.remove(ptr);
+    _strongMap.remove(ptr);
+}
+
+/**
+ * Given a pointer to a C++ class and a D class reference, store a strong
+ * reference for that D class, such that it will not be collected until
+ * the reference is cleared or the class is destroyed manually.
+ */
+@system nothrow
+void storeStrongSmokeMapping(const(void*) ptr, const(Object) object)
+in {
+    assert(ptr !is null, "null C++ class reference");
+    assert(object !is null, "null D class reference");
+    assert(ptr !in _strongMap, "Added pointer mapping twice!");
+} body {
+    _strongMap[ptr] = object;
+}
+
 struct SmokeLoader {
 private:
     ClassLoader[string] _classMap;
@@ -281,5 +363,20 @@ public:
     }
 }
 
+/**
+ * This is a base interface D classes wrapping C++ classes should implement.
+ */
+interface GeneratedSmokeWrapper {
+    @system void disableGC();
+}
+
 /// A meaningless value used for skipping constructors in generated files.
 enum Nothing : byte { nothing }
+
+/// Some additional flags set for types generated with the smoke generator.
+enum SmokeObjectFlags : uint {
+    /// No flags set, the default value
+    none = 0x0,
+    /// This flag indicates that the object shouldn't be deleted by D.
+    unmanaged = 0x1,
+}
