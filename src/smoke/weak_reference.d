@@ -9,7 +9,6 @@
  */
 module smoke.weak_reference;
 
-import core.exception: onOutOfMemoryError;
 import core.memory;
 import core.atomic;
 
