@@ -1,14 +1,4 @@
-/CMakeFiles/
-/CMakeCache.txt
-/cmake_install.cmake
-/Makefile
-/bin
+.dub
+/source/dqt
+/generator/bin
 /lib
-/Debug
-/Release
-*.sln
-*.vcxproj
-*.vcxproj.filters
-*.sdf
-*.suo
-*.opensdf

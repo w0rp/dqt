@@ -29,11 +29,41 @@ void main() {
                 return cppString[7 .. $ - 1];
             }
 
-            if (cppString == "QString") {
+            switch (cppString) {
+            case "QString":
                 return "string";
+            case "qint8":
+                return "byte";
+            case "qint16":
+                return "short";
+            case "qint32":
+                return "int";
+            case "qint64":
+            case "qlonglong":
+                return "long";
+            case "qptrdiff":
+                return "ptrdiff_t";
+            case "qreal":
+                // TODO: Build as float for ARM here somehow.
+                return "double";
+            case "quint8":
+                return "ubyte";
+            case "quint16":
+                return "ushort";
+            case "quint32":
+                return "uint";
+            case "quint64":
+                return "ulong";
+            case "quintptr":
+                // FIXME: This actually needs to be uint on 32-bit.
+                return "ulong";
+            case "qulonglong":
+                return "ulong";
+            case "uchar":
+                return "ubyte";
+            default:
+                return cppString;
             }
-
-            return cppString;
         }
 
         return mappedType(type.unqualifiedTypeString).replace("::", ".");
@@ -43,6 +73,19 @@ void main() {
         switch (cls.name) {
         case "QIconEngineV2":
         case "QGraphicsLayout":
+        case "QStringRef":
+        // I don't know why this was broken.
+        case "QPixmapCache":
+        // TODO: These aren't working at the moment due to bugs
+        // with generating abstract classes.
+        case "QAbstractFileEngineIterator":
+        case "QAccessibleInterfaceEx":
+        case "QAccessibleTable2CellInterface":
+        case "QAbstractProxyModel":
+        case "QAbstractItemModel":
+        case "QAbstractAnimation":
+        case "QVariantAnimation":
+        case "QFactoryInterface":
             return true;
         default:
             return false;
@@ -54,16 +97,27 @@ void main() {
 
         switch (cppString) {
         case "QStringList":
+        case "QStringRef":
+        // TODO: This was broken
+        case "QTextCodec":
+        // TODO: This was broken
+        case "QIODevice":
         case "FT_FaceRec_":
         case "_XDisplay":
         case "_XEvent":
         case "_XRegion":
+        // This was just a problem.
+        case "const QModelIndexList":
         // TODO: Handle QChar with a wrapper.
         case "QChar":
         // TODO: Write an implementation of this.
         case "QStyleOption":
-        // TODO: These were just missing...
+        // TODO: These can't be generated at the moment because there isn't
+        // any support for defining aliases.
         case "Qt::HitTestAccuracy":
+        case "QGraphicsBlurEffect::BlurHints":
+        case "QItemSelectionModel::SelectionFlags":
+        case "QDockWidget::DockWidgetFeatures":
         case "QGraphicsScene::SceneLayers":
             return true;
         default: break;
@@ -85,8 +139,11 @@ void main() {
     generator.importBlacklistFunc = (type) {
         string cppString = type.unqualifiedTypeString;
 
-        if (cppString == "QString") {
+        switch (cppString) {
+        case "QString":
+        case "qreal":
             return true;
+        default: break;
         }
 
         return false;
@@ -113,7 +170,11 @@ void main() {
     };
 
     generator.moduleName = "dqt";
-    generator.sourceDirectory = "dqt_predefined";
+    generator.sourceDirectory = "generator/dqt_predefined";
 
-    generator.writeToDirectory(container, "dqt");
+    generator.writeToDirectory(
+        container,
+        "source/dqt",
+        CleanBuildDirectory.yes
+    );
 }

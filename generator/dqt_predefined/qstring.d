@@ -1,7 +1,11 @@
 module dqt.qstring;
 
 import smoke.smoke;
-import smoke.smoke_cwrapper;
+
+// Declare functions defined in C++.
+extern(C) void* dqt_init_QString_utf16_reference(const(short)* data, int size);
+extern(C) void* dqt_init_QString_utf8_copy(const(char)* data, int size);
+extern(C) void dqt_delete_QString(void* qString);
 
 package struct QStringInputWrapper {
     void* _data;

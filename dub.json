@@ -1,0 +1,48 @@
+{
+    "name": "dqt",
+    "targetType": "library",
+    "targetPath": "lib",
+    "description": "Qt bindings for D",
+    "authors": ["w0rp"],
+    "homepage": "https://github.com/w0rp/dqt",
+    "license": "BSD 2-clause",
+    "copyright": "Copyright © 2014, w0rp",
+    "preBuildCommands": [
+        "generator/bin/dqt_generator"
+    ],
+    "libs": [
+        "smokeqtcore",
+        "smokeqtgui"
+    ],
+    "buildOptions": [
+        "ignoreDeprecations"
+    ],
+    "dependencies": {
+        "dsmoke": {
+            "version": "~master",
+            "path": "../dsmoke"
+        },
+        "dqt:generator": "~master"
+    },
+    "subPackages" : [
+        {
+            "name": "generator",
+            "targetType": "executable",
+            "sourcePaths": ["generator/source"],
+            "targetPath": "generator/bin",
+            "libs": [
+                "smokeqtcore",
+                "smokeqtgui"
+            ],
+            "buildOptions" : [
+                "inline"
+            ],
+            "dependencies": {
+                "dsmoke": {
+                    "version": "~master",
+                    "path": "../dsmoke"
+                }
+            }
+        }
+    ]
+}
