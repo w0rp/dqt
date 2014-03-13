@@ -1,12 +1,14 @@
+import std.algorithm;
+import std.string;
+import std.array;
+import std.datetime;
+import std.stdio;
+
 import smoke.smoke;
 import smoke.smokeqt;
 import smoke.smoke_container;
 import smoke.smoke_generator;
 import smoke.smoke_loader;
-
-import std.algorithm;
-import std.string;
-import std.array;
 
 immutable(SmokeContainer) loadQtSmokeContainer() {
     init_qtcore_Smoke();
@@ -18,12 +20,18 @@ immutable(SmokeContainer) loadQtSmokeContainer() {
 }
 
 void main() {
+    writeln("Generating D source files...");
+
+    StopWatch stopWatch;
+
+    stopWatch.start();
+
     auto container = loadQtSmokeContainer();
 
-    auto generator = SmokeGenerator();
+    auto generatorBuilder = SmokeGeneratorBuilder();
 
     // A function for producing D types.
-    generator.basicDTypeFunc = (type) {
+    generatorBuilder.basicDTypeFunc = (type) {
         string mappedType(string cppString) {
             if (cppString.startsWith("QFlags")) {
                 return cppString[7 .. $ - 1];
@@ -69,7 +77,7 @@ void main() {
         return mappedType(type.unqualifiedTypeString).replace("::", ".");
     };
 
-    generator.classBlackListFunc = (cls) {
+    generatorBuilder.classBlacklistFunc = (cls) {
         switch (cls.name) {
         case "QIconEngineV2":
         case "QGraphicsLayout":
@@ -92,7 +100,7 @@ void main() {
         }
     };
 
-    generator.blackListFunc = (type) {
+    generatorBuilder.blacklistFunc = (type) {
         string cppString = type.unqualifiedTypeString;
 
         switch (cppString) {
@@ -136,7 +144,7 @@ void main() {
         return false;
     };
 
-    generator.importBlacklistFunc = (type) {
+    generatorBuilder.importBlacklistFunc = (type) {
         string cppString = type.unqualifiedTypeString;
 
         switch (cppString) {
@@ -149,7 +157,7 @@ void main() {
         return false;
     };
 
-    generator.inputWrapperFunc = (type) {
+    generatorBuilder.inputWrapperFunc = (type) {
         string cppString = type.unqualifiedTypeString;
 
         if (cppString == "QString") {
@@ -159,7 +167,7 @@ void main() {
         return "";
     };
 
-    generator.outputWrapperFunc = (type) {
+    generatorBuilder.outputWrapperFunc = (type) {
         string cppString = type.unqualifiedTypeString;
 
         if (cppString == "QString") {
@@ -169,12 +177,17 @@ void main() {
         return "";
     };
 
-    generator.moduleName = "dqt";
-    generator.sourceDirectory = "generator/dqt_predefined";
+    generatorBuilder.moduleName = "dqt";
+
+    auto generator = generatorBuilder.buildGenerator(container);
 
     generator.writeToDirectory(
-        container,
+        "generator/dqt_predefined",
         "source/dqt",
         CleanBuildDirectory.yes
     );
+
+    stopWatch.stop();
+
+    writefln("Generation done in %d milliseconds.", stopWatch.peek.msecs);
 }
