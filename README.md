@@ -3,7 +3,6 @@ DQt
 
 This package offers Qt bindings for D, and depends heavily on DSMOKE.
 
-
 ## Updates
 
 Check out [the wiki](https://github.com/w0rp/dqt/wiki) for a summary of project status, what I'm working on, etc.
