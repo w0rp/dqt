@@ -10,6 +10,7 @@ gcc \
     -c source/dqt/qstring_cpp.cpp \
     -o /tmp/qstring_cpp.o &&
 rdmd \
+    -I../dstruct/source \
     -I../dsmoke/source \
     -Isource \
     -L-lstdc++ \

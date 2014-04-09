@@ -1,0 +1,19 @@
+{
+    "name": "dqt_generator",
+    "targetType": "executable",
+    "sourcePaths": ["source"],
+    "targetPath": "bin",
+    "libs": [
+        "smokeqtcore",
+        "smokeqtgui"
+    ],
+    "buildOptions" : [
+        "inline"
+    ],
+    "dependencies": {
+        "dsmoke": {
+            "version": "~master",
+            "path": "../../dsmoke"
+        }
+    }
+}
