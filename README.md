@@ -18,6 +18,26 @@ In order to build this project, you will need the following.
 3. [dstruct](https://github.com/w0rp/dstruct)
 4. [dsmoke](https://github.com/w0rp/dsmoke)
 
+## Getting smokeqt
+
+Supposing you don't have Qt and smokeqt installed, here is what you can do.
+
+### Arch Linux
+
+smokeqt is available in the Arch Linux package manager.
+
+```sh
+pacman -S kdebindings-smokeqt
+```
+
+### Build from source on Linux
+
+A guide for building smokeqt on Linux is available [here](https://github.com/w0rp/dsmoke/blob/master/doc/smoke_linux_build_guide.rst).
+
+### Build from source on Windows
+
+A guide for building smokeqt on Windows is available [here](https://github.com/w0rp/dsmoke/blob/master/doc/smoke_win32_build_guide.rst).
+
 ## Quick Start
 
 If you want to get up and running with the latest code, do this.
