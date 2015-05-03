@@ -32,11 +32,11 @@ pacman -S kdebindings-smokeqt
 
 ### Build from source on Linux
 
-A guide for building smokeqt on Linux is available [here](https://github.com/w0rp/dsmoke/blob/master/doc/smoke_linux_build_guide.rst).
+A guide for building smokeqt on Linux is available [here](https://github.com/w0rp/dsmoke/blob/master/doc/smoke_linux_build_guide.md).
 
 ### Build from source on Windows
 
-A guide for building smokeqt on Windows is available [here](https://github.com/w0rp/dsmoke/blob/master/doc/smoke_win32_build_guide.rst).
+A guide for building smokeqt on Windows is available [here](https://github.com/w0rp/dsmoke/blob/master/doc/smoke_win32_build_guide.md).
 
 ## Quick Start
 
