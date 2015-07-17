@@ -22,11 +22,19 @@ In order to build this project, you will need the following.
 
 Supposing you don't have Qt and smokeqt installed, here is what you can do.
 
+### Debian / Ubuntu / Linux Mint
+
+You should be able to get smokeqt from apt on Debian based distros.
+
+```bash
+apt-get install libsmokeqtgui4-3 libsmokeqt4-dev libsmokeqt4-dbg libsmokeqtcore4-3
+```
+
 ### Arch Linux
 
 smokeqt is available in the Arch Linux package manager.
 
-```sh
+```bash
 pacman -S kdebindings-smokeqt
 ```
 
