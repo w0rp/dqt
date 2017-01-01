@@ -7,9 +7,6 @@
         "smokeqtcore",
         "smokeqtgui"
     ],
-    "buildOptions" : [
-        "inline"
-    ],
     "dependencies": {
         "dsmoke": {
             "version": "~master",
