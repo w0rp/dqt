@@ -1,6 +1,6 @@
 {
     "name": "dqt",
-    "targetType": "none",
+    "targetType": "library",
     "targetPath": "lib",
     "description": "Qt bindings for D",
     "authors": ["w0rp"],
