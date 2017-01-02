@@ -42,12 +42,22 @@ string compileSource(string sourceFilename, string objectFilename) {
     string[] commandLine;
 
     if (sourceFilename.endsWith(".cpp")) {
+        string qtIncludeDir;
+        if(executeShell("which qmake-qt").status == 0)
+        {
+            auto result = executeShell("qmake-qt4 QT_INSTALL_HEADERS");
+            if(result.status == 0)
+                qtIncludeDir = result.output;
+        }
+        if (qtIncludeDir.empty && "/usr/include/qt4".exists)
+            qtIncludeDir = "/usr/include/qt4";
+        else
+            throw new Exception("Failed to find Qt4 include path");
         commandLine = [
-            "g++",
+            "c++",
             "-c", sourceFilename,
             "-o", objectFilename,
-            // TODO: Determine what the path for this is and configure it.
-            "-I/usr/include/qt4/"
+            "-I" ~ qtIncludeDir
         ];
     } else {
         commandLine = [
@@ -141,7 +151,7 @@ int main(string[] argv) {
     // Find all the source files now we've generated them.
     immutable sourceList = cast(immutable)
         dirEntries(sourcePath, SpanMode.breadth)
-        .filter!(x => isFile(x))
+        .filter!(x => x.isFile)
         .map!(x => x.name)
         .filter!(x => x.endsWith(".d") || x.endsWith(".cpp"))
         .array;

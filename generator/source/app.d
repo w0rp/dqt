@@ -1,7 +1,7 @@
+import core.time;
 import std.algorithm;
 import std.string;
 import std.array;
-import std.datetime;
 import std.stdio;
 
 import smoke.smoke;
@@ -22,9 +22,7 @@ immutable(SmokeContainer) loadQtSmokeContainer() {
 void main() {
     writeln("Generating D source files...");
 
-    StopWatch stopWatch;
-
-    stopWatch.start();
+    immutable start = MonoTime.currTime();
 
     auto container = loadQtSmokeContainer();
 
@@ -187,7 +185,6 @@ void main() {
         CleanBuildDirectory.yes
     );
 
-    stopWatch.stop();
-
-    writefln("Generation done in %d milliseconds.", stopWatch.peek.msecs);
+    auto timeElapsed = MonoTime.currTime() - start;
+    writefln("Generation done in %d milliseconds.", timeElapsed.total!"msecs");
 }

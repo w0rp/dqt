@@ -1,6 +1,6 @@
 {
     "name": "dqt",
-    "targetType": "none",
+    "targetType": "library",
     "targetPath": "lib",
     "description": "Qt bindings for D",
     "authors": ["w0rp"],
@@ -8,15 +8,15 @@
     "license": "BSD 2-clause",
     "copyright": "Copyright © 2014, w0rp",
     "preGenerateCommands": [
-        "cd generator && dub build",
+        "cd generator && dub build -b release",
         "generator/bin/dqt_generator"
     ],
     "libs": [
         "smokeqtcore",
         "smokeqtgui"
     ],
-    "buildOptions": [
-        "ignoreDeprecations"
+    "buildRequirements": [
+        "silenceDeprecations"
     ],
     "dependencies": {
         "dsmoke": {
